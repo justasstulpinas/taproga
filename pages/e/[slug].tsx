@@ -92,9 +92,12 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     return { notFound: true };
   }
 
-  if (data.state !== "active") {
-    return { notFound: true };
-  }
+  const PUBLIC_STATE = "active";
+
+if (data.state !== PUBLIC_STATE) {
+  return { notFound: true };
+}
+
 
   if (!data.guest_access_enabled) {
     return { notFound: true };
