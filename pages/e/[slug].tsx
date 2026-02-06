@@ -92,7 +92,9 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     .select("id,title,event_date,state")
     .eq("slug", slug)
     .eq("state", "active")
+    .eq("guest_access_enabled", true)
     .single();
+
 
   if (error || !data) {
     return { notFound: true };
