@@ -1,3 +1,4 @@
+// /pages/e/[slug].tsx
 import { GetServerSideProps } from "next";
 import Head from "next/head";
 import { createClient } from "@supabase/supabase-js";
@@ -32,12 +33,47 @@ function Countdown({ eventDate }: { eventDate: string }) {
 }
 
 export default function PublicEventPage({ event }: Props) {
+  const [verifiedName, setVerifiedName] = useState<string | null>(null);
+  const [inputName, setInputName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
   const date = new Date(event.event_date);
   const formattedDate = date.toLocaleDateString("lt-LT", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+
+  const storageKey = `guest_verified_${event.id}`;
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem(storageKey);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.name) {
+          setVerifiedName(parsed.name);
+        }
+      } catch {
+        sessionStorage.removeItem(storageKey);
+      }
+    }
+  }, [storageKey]);
+
+  const handleVerify = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const name = inputName.trim();
+
+    if (name.length < 2 || name.length > 80) {
+      setError("Please enter your full name.");
+      return;
+    }
+
+    sessionStorage.setItem(storageKey, JSON.stringify({ name }));
+    setVerifiedName(name);
+    setError(null);
+  };
 
   return (
     <>
@@ -60,11 +96,42 @@ export default function PublicEventPage({ event }: Props) {
       </Head>
 
       <main className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center">
-          <h1 className="text-3xl font-semibold mb-4">{event.title}</h1>
-          <p className="text-lg">{formattedDate}</p>
-          <Countdown eventDate={event.event_date} />
-        </div>
+        {!verifiedName ? (
+          <form
+            onSubmit={handleVerify}
+            className="w-full max-w-sm text-center"
+          >
+            <h1 className="text-2xl font-semibold mb-4">
+              Please enter your name
+            </h1>
+
+            <input
+              type="text"
+              value={inputName}
+              onChange={(e) => setInputName(e.target.value)}
+              className="w-full border px-3 py-2 mb-3"
+              placeholder="Your name"
+              required
+            />
+
+            {error && (
+              <p className="text-sm text-red-600 mb-2">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-black text-white py-2"
+            >
+              Continue
+            </button>
+          </form>
+        ) : (
+          <div className="text-center">
+            <h1 className="text-3xl font-semibold mb-4">{event.title}</h1>
+            <p className="text-lg">{formattedDate}</p>
+            <Countdown eventDate={event.event_date} />
+          </div>
+        )}
       </main>
     </>
   );
@@ -94,10 +161,9 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
   const PUBLIC_STATE = "active";
 
-if (data.state !== PUBLIC_STATE) {
-  return { notFound: true };
-}
-
+  if (data.state !== PUBLIC_STATE) {
+    return { notFound: true };
+  }
 
   if (!data.guest_access_enabled) {
     return { notFound: true };
