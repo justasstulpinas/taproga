@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 type EventPublic = {
   id: string;
   title: string;
-  event_date: string; // timestamptz
+  event_date: string;
   state: "draft" | "paid" | "active" | "event_passed" | "archived" | "expired";
 };
 
@@ -15,15 +15,13 @@ type Props = {
 };
 
 function Countdown({ eventDate }: { eventDate: string }) {
-  const [daysLeft, setDaysLeft] = useState<number>(0);
+  const [daysLeft, setDaysLeft] = useState(0);
 
   useEffect(() => {
     const target = new Date(eventDate).getTime();
     const now = Date.now();
     const diff = target - now;
-
-    const days = Math.max(Math.ceil(diff / (1000 * 60 * 60 * 24)), 0);
-    setDaysLeft(days);
+    setDaysLeft(Math.max(Math.ceil(diff / (1000 * 60 * 60 * 24)), 0));
   }, [eventDate]);
 
   return (
@@ -35,24 +33,40 @@ function Countdown({ eventDate }: { eventDate: string }) {
 
 export default function PublicEventPage({ event }: Props) {
   const date = new Date(event.event_date);
+  const formattedDate = date.toLocaleDateString("lt-LT", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   return (
     <>
       <Head>
         <title>{event.title}</title>
+
+        {/* Basic SEO */}
+        <meta
+          name="description"
+          content={`Wedding invitation · ${event.title} · ${formattedDate}`}
+        />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={event.title} />
+        <meta
+          property="og:description"
+          content={`Wedding invitation · ${formattedDate}`}
+        />
+
+        {/* Prevent premature indexing */}
+        <meta name="robots" content="noindex,nofollow" />
       </Head>
 
       <main className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center">
           <h1 className="text-3xl font-semibold mb-4">{event.title}</h1>
 
-          <p className="text-lg">
-            {date.toLocaleDateString("lt-LT", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
+          <p className="text-lg">{formattedDate}</p>
 
           <Countdown eventDate={event.event_date} />
         </div>
@@ -84,9 +98,5 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     return { notFound: true };
   }
 
-  return {
-    props: {
-      event: data,
-    },
-  };
+  return { props: { event: data } };
 };
