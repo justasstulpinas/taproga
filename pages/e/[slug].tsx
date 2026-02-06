@@ -17,6 +17,7 @@ type Props = {
 };
 
 const MAX_ATTEMPTS = 5;
+const VERIFICATION_TTL_MS = 1000 * 60 * 60 * 24; 
 
 function Countdown({ eventDate }: { eventDate: string }) {
   const [daysLeft, setDaysLeft] = useState(0);
@@ -63,7 +64,16 @@ export default function PublicEventPage({ event }: Props) {
       try {
         const parsed = JSON.parse(rawVerified);
         if (parsed?.name && parsed?.verifiedAt) {
-          setVerifiedName(parsed.name);
+          const verifiedAt = new Date(parsed.verifiedAt).getTime();
+          const now = Date.now();
+
+          if (now - verifiedAt < VERIFICATION_TTL_MS) {
+            setVerifiedName(parsed.name);
+            return;
+          }
+
+          // expired
+          sessionStorage.removeItem(VERIFY_KEY);
         }
       } catch {
         sessionStorage.removeItem(VERIFY_KEY);
