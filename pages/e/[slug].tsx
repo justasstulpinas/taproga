@@ -1,17 +1,37 @@
 import { GetServerSideProps } from "next";
 import Head from "next/head";
 import { createClient } from "@supabase/supabase-js";
+import { useEffect, useState } from "react";
 
 type EventPublic = {
   id: string;
   title: string;
   event_date: string; // timestamptz
-  state: "draft" | "paid" | "live" | "locked" | "archived";
+  state: "draft" | "paid" | "active" | "event_passed" | "archived" | "expired";
 };
 
 type Props = {
   event: EventPublic;
 };
+
+function Countdown({ eventDate }: { eventDate: string }) {
+  const [daysLeft, setDaysLeft] = useState<number>(0);
+
+  useEffect(() => {
+    const target = new Date(eventDate).getTime();
+    const now = Date.now();
+    const diff = target - now;
+
+    const days = Math.max(Math.ceil(diff / (1000 * 60 * 60 * 24)), 0);
+    setDaysLeft(days);
+  }, [eventDate]);
+
+  return (
+    <p className="mt-4 text-sm text-gray-600">
+      {daysLeft} days remaining
+    </p>
+  );
+}
 
 export default function PublicEventPage({ event }: Props) {
   const date = new Date(event.event_date);
@@ -25,6 +45,7 @@ export default function PublicEventPage({ event }: Props) {
       <main className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center">
           <h1 className="text-3xl font-semibold mb-4">{event.title}</h1>
+
           <p className="text-lg">
             {date.toLocaleDateString("lt-LT", {
               year: "numeric",
@@ -32,6 +53,8 @@ export default function PublicEventPage({ event }: Props) {
               day: "numeric",
             })}
           </p>
+
+          <Countdown eventDate={event.event_date} />
         </div>
       </main>
     </>
@@ -47,7 +70,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY! // SSR only
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
   const { data, error } = await supabase
