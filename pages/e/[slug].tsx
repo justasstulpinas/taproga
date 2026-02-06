@@ -44,13 +44,11 @@ export default function PublicEventPage({ event }: Props) {
       <Head>
         <title>{event.title}</title>
 
-        {/* Basic SEO */}
         <meta
           name="description"
           content={`Wedding invitation · ${event.title} · ${formattedDate}`}
         />
 
-        {/* Open Graph */}
         <meta property="og:type" content="website" />
         <meta property="og:title" content={event.title} />
         <meta
@@ -58,16 +56,13 @@ export default function PublicEventPage({ event }: Props) {
           content={`Wedding invitation · ${formattedDate}`}
         />
 
-        {/* Prevent premature indexing */}
         <meta name="robots" content="noindex,nofollow" />
       </Head>
 
       <main className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center">
           <h1 className="text-3xl font-semibold mb-4">{event.title}</h1>
-
           <p className="text-lg">{formattedDate}</p>
-
           <Countdown eventDate={event.event_date} />
         </div>
       </main>
@@ -87,18 +82,32 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("events")
-    .select("id,title,event_date,state")
+    .select("id,title,event_date,state,guest_access_enabled")
     .eq("slug", slug)
-    .eq("state", "active")
-    .eq("guest_access_enabled", true)
     .single();
 
-
-  if (error || !data) {
+  if (!data) {
     return { notFound: true };
   }
 
-  return { props: { event: data } };
+  if (data.state !== "active") {
+    return { notFound: true };
+  }
+
+  if (!data.guest_access_enabled) {
+    return { notFound: true };
+  }
+
+  return {
+    props: {
+      event: {
+        id: data.id,
+        title: data.title,
+        event_date: data.event_date,
+        state: data.state,
+      },
+    },
+  };
 };
