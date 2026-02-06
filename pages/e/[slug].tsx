@@ -14,10 +14,8 @@ type Props = {
   event: EventPublic;
 };
 
-/**
- * TEMPORARY, HARDCODED VERIFICATION 
- */
 const VERIFICATION_PHRASE = "kviečiame į mūsų šventę";
+const MAX_ATTEMPTS = 5;
 
 function Countdown({ eventDate }: { eventDate: string }) {
   const [daysLeft, setDaysLeft] = useState(0);
@@ -37,10 +35,14 @@ function Countdown({ eventDate }: { eventDate: string }) {
 }
 
 export default function PublicEventPage({ event }: Props) {
+  const VERIFY_KEY = `guest_verified_${event.id}`;
+  const ATTEMPTS_KEY = `guest_verify_attempts_${event.id}`;
+
   const [verifiedName, setVerifiedName] = useState<string | null>(null);
   const [inputName, setInputName] = useState("");
   const [inputPhrase, setInputPhrase] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [attempts, setAttempts] = useState(0);
 
   const date = new Date(event.event_date);
   const formattedDate = date.toLocaleDateString("lt-LT", {
@@ -49,50 +51,63 @@ export default function PublicEventPage({ event }: Props) {
     day: "numeric",
   });
 
-  const storageKey = `guest_verified_${event.id}`;
-
   useEffect(() => {
-    const raw = sessionStorage.getItem(storageKey);
-    if (!raw) return;
+    const rawVerified = sessionStorage.getItem(VERIFY_KEY);
+    const rawAttempts = sessionStorage.getItem(ATTEMPTS_KEY);
 
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed?.name && parsed?.verifiedAt) {
-        setVerifiedName(parsed.name);
+    if (rawAttempts) {
+      const parsedAttempts = parseInt(rawAttempts, 10);
+      if (!Number.isNaN(parsedAttempts)) {
+        setAttempts(parsedAttempts);
       }
-    } catch {
-      sessionStorage.removeItem(storageKey);
     }
-  }, [storageKey]);
+
+    if (rawVerified) {
+      try {
+        const parsed = JSON.parse(rawVerified);
+        if (parsed?.name && parsed?.verifiedAt) {
+          setVerifiedName(parsed.name);
+        }
+      } catch {
+        sessionStorage.removeItem(VERIFY_KEY);
+      }
+    }
+  }, [VERIFY_KEY, ATTEMPTS_KEY]);
 
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (attempts >= MAX_ATTEMPTS) {
+      return;
+    }
 
     const name = inputName.trim();
     const phrase = inputPhrase.trim().toLowerCase();
     const expectedPhrase = VERIFICATION_PHRASE.trim().toLowerCase();
 
-    if (name.length < 2 || name.length > 80) {
-      setError("Verification failed.");
-      return;
-    }
-
-    if (phrase !== expectedPhrase) {
+    if (name.length < 2 || name.length > 80 || phrase !== expectedPhrase) {
+      const nextAttempts = attempts + 1;
+      sessionStorage.setItem(ATTEMPTS_KEY, String(nextAttempts));
+      setAttempts(nextAttempts);
       setError("Verification failed.");
       return;
     }
 
     sessionStorage.setItem(
-      storageKey,
+      VERIFY_KEY,
       JSON.stringify({
         name,
         verifiedAt: new Date().toISOString(),
       })
     );
 
+    sessionStorage.removeItem(ATTEMPTS_KEY);
     setVerifiedName(name);
+    setAttempts(0);
     setError(null);
   };
+
+  const lockedOut = attempts >= MAX_ATTEMPTS;
 
   return (
     <>
@@ -131,6 +146,7 @@ export default function PublicEventPage({ event }: Props) {
               className="w-full border px-3 py-2 mb-3"
               placeholder="Your full name"
               required
+              disabled={lockedOut}
             />
 
             <input
@@ -140,15 +156,23 @@ export default function PublicEventPage({ event }: Props) {
               className="w-full border px-3 py-2 mb-3"
               placeholder="Verification phrase"
               required
+              disabled={lockedOut}
             />
 
             {error && (
               <p className="text-sm text-red-600 mb-2">{error}</p>
             )}
 
+            {lockedOut && (
+              <p className="text-sm text-red-600 mb-2">
+                Too many attempts. Please restart your session.
+              </p>
+            )}
+
             <button
               type="submit"
               className="w-full bg-black text-white py-2"
+              disabled={lockedOut}
             >
               Continue
             </button>
