@@ -1,3 +1,4 @@
+// /pages/e/[slug].tsx
 import { GetServerSideProps } from "next";
 import Head from "next/head";
 import { createClient } from "@supabase/supabase-js";
@@ -8,13 +9,13 @@ type EventPublic = {
   title: string;
   event_date: string;
   state: "draft" | "paid" | "active" | "event_passed" | "archived" | "expired";
+  verificationPhrase: string;
 };
 
 type Props = {
   event: EventPublic;
 };
 
-const VERIFICATION_PHRASE = "kviečiame į mūsų šventę";
 const MAX_ATTEMPTS = 5;
 
 function Countdown({ eventDate }: { eventDate: string }) {
@@ -27,11 +28,7 @@ function Countdown({ eventDate }: { eventDate: string }) {
     setDaysLeft(Math.max(Math.ceil(diff / (1000 * 60 * 60 * 24)), 0));
   }, [eventDate]);
 
-  return (
-    <p className="mt-4 text-sm text-gray-600">
-      {daysLeft} days remaining
-    </p>
-  );
+  return <p className="mt-4 text-sm text-gray-600">{daysLeft} days remaining</p>;
 }
 
 export default function PublicEventPage({ event }: Props) {
@@ -77,15 +74,17 @@ export default function PublicEventPage({ event }: Props) {
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (attempts >= MAX_ATTEMPTS) {
-      return;
-    }
+    if (attempts >= MAX_ATTEMPTS) return;
 
     const name = inputName.trim();
     const phrase = inputPhrase.trim().toLowerCase();
-    const expectedPhrase = VERIFICATION_PHRASE.trim().toLowerCase();
+    const expectedPhrase = event.verificationPhrase.toLowerCase();
 
-    if (name.length < 2 || name.length > 80 || phrase !== expectedPhrase) {
+    if (
+      name.length < 2 ||
+      name.length > 80 ||
+      phrase !== expectedPhrase
+    ) {
       const nextAttempts = attempts + 1;
       sessionStorage.setItem(ATTEMPTS_KEY, String(nextAttempts));
       setAttempts(nextAttempts);
@@ -113,28 +112,22 @@ export default function PublicEventPage({ event }: Props) {
     <>
       <Head>
         <title>{event.title}</title>
-
         <meta
           name="description"
           content={`Wedding invitation · ${event.title} · ${formattedDate}`}
         />
-
         <meta property="og:type" content="website" />
         <meta property="og:title" content={event.title} />
         <meta
           property="og:description"
           content={`Wedding invitation · ${formattedDate}`}
         />
-
         <meta name="robots" content="noindex,nofollow" />
       </Head>
 
       <main className="min-h-screen flex items-center justify-center px-4">
         {!verifiedName ? (
-          <form
-            onSubmit={handleVerify}
-            className="w-full max-w-sm text-center"
-          >
+          <form onSubmit={handleVerify} className="w-full max-w-sm text-center">
             <h1 className="text-2xl font-semibold mb-4">
               Enter your details
             </h1>
@@ -145,8 +138,8 @@ export default function PublicEventPage({ event }: Props) {
               onChange={(e) => setInputName(e.target.value)}
               className="w-full border px-3 py-2 mb-3"
               placeholder="Your full name"
-              required
               disabled={lockedOut}
+              required
             />
 
             <input
@@ -155,8 +148,8 @@ export default function PublicEventPage({ event }: Props) {
               onChange={(e) => setInputPhrase(e.target.value)}
               className="w-full border px-3 py-2 mb-3"
               placeholder="Verification phrase"
-              required
               disabled={lockedOut}
+              required
             />
 
             {error && (
@@ -165,7 +158,7 @@ export default function PublicEventPage({ event }: Props) {
 
             {lockedOut && (
               <p className="text-sm text-red-600 mb-2">
-                Too many attempts. Please restart your session.
+                Too many attempts. Restart your session.
               </p>
             )}
 
@@ -203,7 +196,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
   const { data } = await supabase
     .from("events")
-    .select("id,title,event_date,state,guest_access_enabled")
+    .select("id,title,event_date,state,guest_access_enabled,slug")
     .eq("slug", slug)
     .single();
 
@@ -221,6 +214,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     return { notFound: true };
   }
 
+  const verificationPhrase = `kviečiame į ${data.slug.toLowerCase()} šventę`;
+
   return {
     props: {
       event: {
@@ -228,6 +223,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         title: data.title,
         event_date: data.event_date,
         state: data.state,
+        verificationPhrase,
       },
     },
   };
