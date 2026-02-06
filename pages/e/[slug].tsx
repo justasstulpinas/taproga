@@ -1,4 +1,3 @@
-// /pages/e/[slug].tsx
 import { GetServerSideProps } from "next";
 import Head from "next/head";
 import { createClient } from "@supabase/supabase-js";
@@ -14,6 +13,11 @@ type EventPublic = {
 type Props = {
   event: EventPublic;
 };
+
+/**
+ * TEMPORARY, HARDCODED VERIFICATION 
+ */
+const VERIFICATION_PHRASE = "kviečiame į mūsų šventę";
 
 function Countdown({ eventDate }: { eventDate: string }) {
   const [daysLeft, setDaysLeft] = useState(0);
@@ -35,6 +39,7 @@ function Countdown({ eventDate }: { eventDate: string }) {
 export default function PublicEventPage({ event }: Props) {
   const [verifiedName, setVerifiedName] = useState<string | null>(null);
   const [inputName, setInputName] = useState("");
+  const [inputPhrase, setInputPhrase] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const date = new Date(event.event_date);
@@ -48,15 +53,15 @@ export default function PublicEventPage({ event }: Props) {
 
   useEffect(() => {
     const raw = sessionStorage.getItem(storageKey);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed?.name) {
-          setVerifiedName(parsed.name);
-        }
-      } catch {
-        sessionStorage.removeItem(storageKey);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.name && parsed?.verifiedAt) {
+        setVerifiedName(parsed.name);
       }
+    } catch {
+      sessionStorage.removeItem(storageKey);
     }
   }, [storageKey]);
 
@@ -64,13 +69,27 @@ export default function PublicEventPage({ event }: Props) {
     e.preventDefault();
 
     const name = inputName.trim();
+    const phrase = inputPhrase.trim().toLowerCase();
+    const expectedPhrase = VERIFICATION_PHRASE.trim().toLowerCase();
 
     if (name.length < 2 || name.length > 80) {
-      setError("Please enter your full name.");
+      setError("Verification failed.");
       return;
     }
 
-    sessionStorage.setItem(storageKey, JSON.stringify({ name }));
+    if (phrase !== expectedPhrase) {
+      setError("Verification failed.");
+      return;
+    }
+
+    sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        name,
+        verifiedAt: new Date().toISOString(),
+      })
+    );
+
     setVerifiedName(name);
     setError(null);
   };
@@ -102,7 +121,7 @@ export default function PublicEventPage({ event }: Props) {
             className="w-full max-w-sm text-center"
           >
             <h1 className="text-2xl font-semibold mb-4">
-              Please enter your name
+              Enter your details
             </h1>
 
             <input
@@ -110,7 +129,16 @@ export default function PublicEventPage({ event }: Props) {
               value={inputName}
               onChange={(e) => setInputName(e.target.value)}
               className="w-full border px-3 py-2 mb-3"
-              placeholder="Your name"
+              placeholder="Your full name"
+              required
+            />
+
+            <input
+              type="text"
+              value={inputPhrase}
+              onChange={(e) => setInputPhrase(e.target.value)}
+              className="w-full border px-3 py-2 mb-3"
+              placeholder="Verification phrase"
               required
             />
 
