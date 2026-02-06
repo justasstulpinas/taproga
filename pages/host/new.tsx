@@ -1,3 +1,5 @@
+// pages/host/new.tsx
+
 import { useState } from 'react'
 import { useRouter } from 'next/router'
 import { supabase } from '../../lib/supabaseClient'
@@ -27,9 +29,23 @@ export default function NewEventPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
 
+    // basic validation
+    if (!title.trim()) {
+      alert('Title is required')
+      return
+    }
+    if (!date) {
+      alert('Date is required')
+      return
+    }
+    if (!time) {
+      alert('Time is required')
+      return
+    }
+
     const baseSlug = slugify(title)
 
-    // find existing slugs to avoid unique constraint violation
+    // avoid slug collision
     const { count } = await supabase
       .from('events')
       .select('id', { count: 'exact', head: true })
