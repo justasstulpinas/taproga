@@ -1,122 +1,103 @@
 // /pages/e/[slug].tsx
 import { GetServerSideProps } from "next";
 import Head from "next/head";
-import { createClient } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
-
-type EventPublic = {
-  id: string;
-  title: string;
-  event_date: string;
-  state: "draft" | "paid" | "active" | "event_passed" | "archived" | "expired";
-  verificationPhrase: string;
-};
+import { canGuestViewEvent } from "@/src/domain/event/event.guards";
+import { buildVerificationPhrase } from "@/src/domain/event/event.rules";
+import { EventPublic } from "@/src/domain/event/event.types";
+import {
+  isLockedOut,
+  isVerificationExpired,
+  validateGuestVerification,
+} from "@/src/domain/guest/guest.rules";
+import { getVerificationAttempts, getVerificationRecord } from "@/src/services/guest/guest.read";
+import {
+  clearVerificationAttempts,
+  clearVerificationRecord,
+  setVerificationAttempts,
+  setVerificationRecord,
+} from "@/src/services/guest/guest.write";
+import { getEventBySlug } from "@/src/services/event/event.read.server";
+import { ServiceError } from "@/src/shared/errors";
+import { formatEventDateLtLt, nowIsoString, nowMs } from "@/src/shared/time";
+import { PublicEventPage } from "@/src/ui/guest/PublicEventPage";
 
 type Props = {
-  event: EventPublic;
+  event: EventPublic | null;
+  error?: string | null;
 };
 
-const MAX_ATTEMPTS = 5;
-const VERIFICATION_TTL_MS = 1000 * 60 * 60 * 24; 
-
-function Countdown({ eventDate }: { eventDate: string }) {
-  const [daysLeft, setDaysLeft] = useState(0);
-
-  useEffect(() => {
-    const target = new Date(eventDate).getTime();
-    const now = Date.now();
-    const diff = target - now;
-    setDaysLeft(Math.max(Math.ceil(diff / (1000 * 60 * 60 * 24)), 0));
-  }, [eventDate]);
-
-  return <p className="mt-4 text-sm text-gray-600">{daysLeft} days remaining</p>;
-}
-
-export default function PublicEventPage({ event }: Props) {
-  const VERIFY_KEY = `guest_verified_${event.id}`;
-  const ATTEMPTS_KEY = `guest_verify_attempts_${event.id}`;
-
+export default function PublicEventRoute({ event, error }: Props) {
   const [verifiedName, setVerifiedName] = useState<string | null>(null);
   const [inputName, setInputName] = useState("");
   const [inputPhrase, setInputPhrase] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(0);
 
-  const date = new Date(event.event_date);
-  const formattedDate = date.toLocaleDateString("lt-LT", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
   useEffect(() => {
-    const rawVerified = sessionStorage.getItem(VERIFY_KEY);
-    const rawAttempts = sessionStorage.getItem(ATTEMPTS_KEY);
+    if (!event) return;
 
-    if (rawAttempts) {
-      const parsedAttempts = parseInt(rawAttempts, 10);
-      if (!Number.isNaN(parsedAttempts)) {
-        setAttempts(parsedAttempts);
+    const verifyKey = `guest_verified_${event.id}`;
+    const attemptsKey = `guest_verify_attempts_${event.id}`;
+
+    const storedAttempts = getVerificationAttempts(attemptsKey);
+    setAttempts(storedAttempts);
+
+    const record = getVerificationRecord(verifyKey);
+    if (record) {
+      const now = nowMs();
+      if (!isVerificationExpired(record.verifiedAt, now)) {
+        setVerifiedName(record.name);
+        return;
       }
+
+      clearVerificationRecord(verifyKey);
     }
+  }, [event]);
 
-    if (rawVerified) {
-      try {
-        const parsed = JSON.parse(rawVerified);
-        if (parsed?.name && parsed?.verifiedAt) {
-          const verifiedAt = new Date(parsed.verifiedAt).getTime();
-          const now = Date.now();
+  if (!event) {
+    return (
+      <main className="min-h-screen flex items-center justify-center px-4">
+        <p className="text-sm text-red-600">{error || "Something went wrong"}</p>
+      </main>
+    );
+  }
 
-          if (now - verifiedAt < VERIFICATION_TTL_MS) {
-            setVerifiedName(parsed.name);
-            return;
-          }
-
-          // expired
-          sessionStorage.removeItem(VERIFY_KEY);
-        }
-      } catch {
-        sessionStorage.removeItem(VERIFY_KEY);
-      }
-    }
-  }, [VERIFY_KEY, ATTEMPTS_KEY]);
+  const formattedDate = formatEventDateLtLt(event.event_date);
+  const lockedOut = isLockedOut(attempts);
 
   const handleVerify = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (attempts >= MAX_ATTEMPTS) return;
+    if (isLockedOut(attempts)) return;
 
-    const name = inputName.trim();
-    const phrase = inputPhrase.trim().toLowerCase();
-    const expectedPhrase = event.verificationPhrase.toLowerCase();
+    const verifyKey = `guest_verified_${event.id}`;
+    const attemptsKey = `guest_verify_attempts_${event.id}`;
 
-    if (
-      name.length < 2 ||
-      name.length > 80 ||
-      phrase !== expectedPhrase
-    ) {
+    const result = validateGuestVerification(
+      inputName,
+      inputPhrase,
+      event.verificationPhrase
+    );
+
+    if (!result.ok) {
       const nextAttempts = attempts + 1;
-      sessionStorage.setItem(ATTEMPTS_KEY, String(nextAttempts));
+      setVerificationAttempts(attemptsKey, nextAttempts);
       setAttempts(nextAttempts);
-      setError("Verification failed.");
+      setVerificationError("Verification failed.");
       return;
     }
 
-    sessionStorage.setItem(
-      VERIFY_KEY,
-      JSON.stringify({
-        name,
-        verifiedAt: new Date().toISOString(),
-      })
-    );
+    setVerificationRecord(verifyKey, {
+      name: result.name,
+      verifiedAt: nowIsoString(),
+    });
 
-    sessionStorage.removeItem(ATTEMPTS_KEY);
-    setVerifiedName(name);
+    clearVerificationAttempts(attemptsKey);
+    setVerifiedName(result.name);
     setAttempts(0);
-    setError(null);
+    setVerificationError(null);
   };
-
-  const lockedOut = attempts >= MAX_ATTEMPTS;
 
   return (
     <>
@@ -135,59 +116,18 @@ export default function PublicEventPage({ event }: Props) {
         <meta name="robots" content="noindex,nofollow" />
       </Head>
 
-      <main className="min-h-screen flex items-center justify-center px-4">
-        {!verifiedName ? (
-          <form onSubmit={handleVerify} className="w-full max-w-sm text-center">
-            <h1 className="text-2xl font-semibold mb-4">
-              Enter your details
-            </h1>
-
-            <input
-              type="text"
-              value={inputName}
-              onChange={(e) => setInputName(e.target.value)}
-              className="w-full border px-3 py-2 mb-3"
-              placeholder="Your full name"
-              disabled={lockedOut}
-              required
-            />
-
-            <input
-              type="text"
-              value={inputPhrase}
-              onChange={(e) => setInputPhrase(e.target.value)}
-              className="w-full border px-3 py-2 mb-3"
-              placeholder="Verification phrase"
-              disabled={lockedOut}
-              required
-            />
-
-            {error && (
-              <p className="text-sm text-red-600 mb-2">{error}</p>
-            )}
-
-            {lockedOut && (
-              <p className="text-sm text-red-600 mb-2">
-                Too many attempts. Restart your session.
-              </p>
-            )}
-
-            <button
-              type="submit"
-              className="w-full bg-black text-white py-2"
-              disabled={lockedOut}
-            >
-              Continue
-            </button>
-          </form>
-        ) : (
-          <div className="text-center">
-            <h1 className="text-3xl font-semibold mb-4">{event.title}</h1>
-            <p className="text-lg">{formattedDate}</p>
-            <Countdown eventDate={event.event_date} />
-          </div>
-        )}
-      </main>
+      <PublicEventPage
+        event={event}
+        formattedDate={formattedDate}
+        verifiedName={verifiedName}
+        inputName={inputName}
+        inputPhrase={inputPhrase}
+        error={verificationError}
+        lockedOut={lockedOut}
+        onInputNameChange={setInputName}
+        onInputPhraseChange={setInputPhrase}
+        onVerifySubmit={handleVerify}
+      />
     </>
   );
 }
@@ -199,42 +139,30 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     return { notFound: true };
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  try {
+    const event = await getEventBySlug(slug);
 
-  const { data } = await supabase
-    .from("events")
-    .select("id,title,event_date,state,guest_access_enabled,slug")
-    .eq("slug", slug)
-    .single();
+    if (!event) {
+      return { notFound: true };
+    }
 
-  if (!data) {
-    return { notFound: true };
-  }
+    if (!canGuestViewEvent(event)) {
+      return { notFound: true };
+    }
 
-  const PUBLIC_STATE = "active";
-
-  if (data.state !== PUBLIC_STATE) {
-    return { notFound: true };
-  }
-
-  if (!data.guest_access_enabled) {
-    return { notFound: true };
-  }
-
-  const verificationPhrase = `kviečiame į ${data.slug.toLowerCase()} šventę`;
-
-  return {
-    props: {
-      event: {
-        id: data.id,
-        title: data.title,
-        event_date: data.event_date,
-        state: data.state,
-        verificationPhrase,
+    return {
+      props: {
+        event: {
+          id: event.id,
+          title: event.title,
+          event_date: event.event_date,
+          state: event.state,
+          verificationPhrase: buildVerificationPhrase(event.slug),
+        },
       },
-    },
-  };
+    };
+  } catch (err) {
+    const message = err instanceof ServiceError ? err.message : "Something went wrong";
+    return { props: { event: null, error: message } };
+  }
 };

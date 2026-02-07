@@ -1,18 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 import { buffer } from "micro";
-import { createClient } from "@supabase/supabase-js";
+import { constructStripeEvent } from "@/src/services/payments/payments.webhook";
+import { markEventPaidFromStripe } from "@/src/services/event/event.write.server";
+import { ServiceError } from "@/src/shared/errors";
 
 export const config = {
   api: { bodyParser: false },
 };
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export default async function handler(
   req: NextApiRequest,
@@ -21,18 +16,14 @@ export default async function handler(
   if (req.method !== "POST") return res.status(405).end();
 
   const sig = req.headers["stripe-signature"];
-  if (!sig) return res.status(400).end();
+  if (!sig || typeof sig !== "string") return res.status(400).end();
 
   let event: Stripe.Event;
 
   try {
     const rawBody = await buffer(req);
-    event = stripe.webhooks.constructEvent(
-      rawBody,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
-  } catch {
+    event = constructStripeEvent(rawBody, sig);
+  } catch (err) {
     return res.status(400).send("Webhook Error");
   }
 
@@ -41,14 +32,12 @@ export default async function handler(
     const eventId = session.metadata?.event_id;
 
     if (eventId) {
-      await supabase
-        .from("events")
-        .update({
-          state: "paid",
-          paid_at: new Date().toISOString(),
-          stripe_session_id: session.id,
-        })
-        .eq("id", eventId);
+      try {
+        await markEventPaidFromStripe(eventId, session.id);
+      } catch (err) {
+        const message = err instanceof ServiceError ? err.message : "Internal server error";
+        return res.status(500).send(message);
+      }
     }
   }
 

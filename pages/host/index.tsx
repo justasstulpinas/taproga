@@ -1,75 +1,68 @@
-// pages/host/index.tsx
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { HostHomePage } from "@/src/ui/host/HostHomePage";
+import { listHostEvents } from "@/src/services/event/event.read";
+import { toggleGuestAccess } from "@/src/services/event/event.write";
+import { getSession } from "@/src/services/auth/auth.read";
+import { EventSummary } from "@/src/domain/event/event.types";
+import { ServiceError } from "@/src/shared/errors";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/router'
-import { supabase } from '../../lib/supabaseClient'
-
-type EventRow = {
-  id: string
-  title: string
-  slug: string
-  state: string
-  guest_access_enabled: boolean
+function getErrorMessage(error: unknown) {
+  return error instanceof ServiceError ? error.message : "Something went wrong";
 }
 
 export default function HostHome() {
-  const router = useRouter()
-  const [events, setEvents] = useState<EventRow[]>([])
+  const router = useRouter();
+  const [events, setEvents] = useState<EventSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!data.session) {
-        router.replace('/login')
-        return
+    let isMounted = true;
+
+    async function load() {
+      try {
+        const session = await getSession();
+        if (!session) {
+          router.replace("/login");
+          return;
+        }
+
+        const rows = await listHostEvents();
+        if (isMounted) setEvents(rows);
+      } catch (err) {
+        if (isMounted) setError(getErrorMessage(err));
       }
-
-      const { data: rows, error } = await supabase
-        .from('events')
-        .select('id, title, slug, state, guest_access_enabled')
-        .order('created_at', { ascending: false })
-
-      if (!error) setEvents(rows || [])
-    })
-  }, [router])
-
-  async function toggleGuestAccess(id: string, enabled: boolean) {
-    const { error } = await supabase
-      .from('events')
-      .update({ guest_access_enabled: !enabled })
-      .eq('id', id)
-
-    if (error) {
-      alert(error.message)
-      return
     }
 
-    setEvents((prev) =>
-      prev.map((e) =>
-        e.id === id ? { ...e, guest_access_enabled: !enabled } : e
-      )
-    )
+    load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
+
+  async function handleToggleGuestAccess(id: string, enabled: boolean) {
+    try {
+      await toggleGuestAccess(id, enabled);
+
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === id ? { ...e, guest_access_enabled: !enabled } : e
+        )
+      );
+    } catch (err) {
+      const message = getErrorMessage(err);
+      setError(message);
+      alert(message);
+    }
   }
 
   return (
-    <main>
-      <h1>Host Dashboard</h1>
-
-      <button onClick={() => router.push('/host/new')}>
-        Create event
-      </button>
-
-      <ul>
-        {events.map((e) => (
-          <li key={e.id}>
-            {e.title} — {e.state} — guest access:{' '}
-            <button
-              onClick={() => toggleGuestAccess(e.id, e.guest_access_enabled)}
-            >
-              {e.guest_access_enabled ? 'ON' : 'OFF'}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </main>
-  )
+    <HostHomePage
+      events={events}
+      error={error}
+      onCreateEvent={() => router.push("/host/new")}
+      onToggleGuestAccess={handleToggleGuestAccess}
+    />
+  );
 }
