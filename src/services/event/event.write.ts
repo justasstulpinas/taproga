@@ -1,9 +1,9 @@
-import { supabaseClient } from "@/src/infra/supabase.client";
-import { buildEventDate, buildUniqueSlug, slugifyEventTitle } from "@/src/domain/event/event.rules";
-import { NewEventInput } from "@/src/domain/event/event.types";
-import { requireSession } from "@/src/services/auth/auth.read";
-import { countEventsBySlugPrefix } from "@/src/services/event/event.read";
-import { ServiceError } from "@/src/shared/errors";
+import { supabaseClient } from "@/infra/supabase.client";
+import { buildEventDate, buildUniqueSlug, slugifyEventTitle } from "@/domain/event/event.rules";
+import { NewEventInput } from "@/domain/event/event.types";
+import { requireSession } from "@/services/auth/auth.read";
+import { countEventsBySlugPrefix } from "@/services/event/event.read";
+import { ServiceError } from "@/shared/errors";
 
 export async function toggleGuestAccess(eventId: string, enabled: boolean) {
   const { error } = await supabaseClient

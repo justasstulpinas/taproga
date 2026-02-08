@@ -1,7 +1,7 @@
 import Stripe from "stripe";
-import { stripe } from "@/src/infra/stripe.client";
-import { ENV } from "@/src/shared/env";
-import { ServiceError } from "@/src/shared/errors";
+import { stripe } from "@/infra/stripe.client";
+import { ENV } from "@/shared/env";
+import { ServiceError } from "@/shared/errors";
 
 export function constructStripeEvent(
   rawBody: Buffer,
@@ -13,7 +13,7 @@ export function constructStripeEvent(
       signature,
       ENV.STRIPE_WEBHOOK_SECRET
     );
-  } catch (error) {
+  } catch (error: unknown) {
     throw new ServiceError("STRIPE_ERROR", "Webhook Error", error);
   }
 }

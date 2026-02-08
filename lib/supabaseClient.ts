@@ -1,1 +1,1 @@
-export { supabaseClient as supabase } from "@/src/infra/supabase.client";
+export { supabaseClient as supabase } from "@/infra/supabase.client";

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NewEventInput } from "@/src/domain/event/event.types";
+import { NewEventInput } from "@/domain/event/event.types";
 
 export type HostNewEventPageProps = {
   error: string | null;

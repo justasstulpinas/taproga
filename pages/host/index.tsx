@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { HostHomePage } from "@/src/ui/host/HostHomePage";
-import { listHostEvents } from "@/src/services/event/event.read";
-import { toggleGuestAccess } from "@/src/services/event/event.write";
-import { getSession } from "@/src/services/auth/auth.read";
-import { EventSummary } from "@/src/domain/event/event.types";
-import { ServiceError } from "@/src/shared/errors";
+import { HostHomePage } from "@/ui/host/HostHomePage";
+import { listHostEvents } from "@/services/event/event.read";
+import { toggleGuestAccess } from "@/services/event/event.write";
+import { getSession } from "@/services/auth/auth.read";
+import { EventSummary } from "@/domain/event/event.types";
+import { ServiceError } from "@/shared/errors";
 
 function getErrorMessage(error: unknown) {
   return error instanceof ServiceError ? error.message : "Something went wrong";
@@ -29,7 +29,7 @@ export default function HostHome() {
 
         const rows = await listHostEvents();
         if (isMounted) setEvents(rows);
-      } catch (err) {
+      } catch (err: unknown) {
         if (isMounted) setError(getErrorMessage(err));
       }
     }
@@ -50,7 +50,7 @@ export default function HostHome() {
           e.id === id ? { ...e, guest_access_enabled: !enabled } : e
         )
       );
-    } catch (err) {
+    } catch (err: unknown) {
       const message = getErrorMessage(err);
       setError(message);
       alert(message);

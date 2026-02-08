@@ -1,7 +1,7 @@
 import Stripe from "stripe";
-import { stripe } from "@/src/infra/stripe.client";
-import { STRIPE_PRICES } from "@/src/shared/constants";
-import { ServiceError } from "@/src/shared/errors";
+import { stripe } from "@/infra/stripe.client";
+import { STRIPE_PRICES } from "@/shared/constants";
+import { ServiceError } from "@/shared/errors";
 
 export async function createCheckoutSession(input: {
   tier: number | string;
@@ -40,7 +40,7 @@ export async function createCheckoutSession(input: {
     });
 
     return session;
-  } catch (error) {
+  } catch (error: unknown) {
     throw new ServiceError("STRIPE_ERROR", "Stripe error", error);
   }
 }

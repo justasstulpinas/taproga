@@ -1,6 +1,6 @@
-import { supabaseServiceRole } from "@/src/infra/supabase.service";
-import { ServiceError } from "@/src/shared/errors";
-import { EventRowForPublic } from "@/src/domain/event/event.types";
+import { supabaseServiceRole } from "@/infra/supabase.service";
+import { ServiceError } from "@/shared/errors";
+import { EventRowForPublic } from "@/domain/event/event.types";
 
 export async function getEventBySlug(
   slug: string

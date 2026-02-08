@@ -1,6 +1,6 @@
-import { supabaseServiceRole } from "@/src/infra/supabase.service";
-import { ServiceError } from "@/src/shared/errors";
-import { EventState } from "@/src/shared/constants";
+import { supabaseServiceRole } from "@/infra/supabase.service";
+import { ServiceError } from "@/shared/errors";
+import { EventState } from "@/domain/event/event.types";
 
 export async function markEventPaidFromStripe(eventId: string, sessionId: string) {
   const { error } = await supabaseServiceRole

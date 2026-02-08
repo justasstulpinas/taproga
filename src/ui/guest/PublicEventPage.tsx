@@ -1,5 +1,5 @@
-import { EventPublic } from "@/src/domain/event/event.types";
-import { Countdown } from "@/src/ui/components/Countdown";
+import { EventPublic } from "@/domain/event/event.types";
+import { Countdown } from "@/ui/components/Countdown";
 
 export type PublicEventPageProps = {
   event: EventPublic;

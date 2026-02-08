@@ -1,5 +1,5 @@
-import { supabaseClient } from "@/src/infra/supabase.client";
-import { ServiceError } from "@/src/shared/errors";
+import { supabaseClient } from "@/infra/supabase.client";
+import { ServiceError } from "@/shared/errors";
 
 export async function signInWithPassword(email: string, password: string) {
   const { data, error } = await supabaseClient.auth.signInWithPassword({

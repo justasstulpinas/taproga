@@ -1,4 +1,4 @@
-import { GuestVerificationRecord } from "@/src/domain/guest/guest.types";
+import { GuestVerificationRecord } from "@/domain/guest/guest.types";
 
 export const MAX_VERIFICATION_ATTEMPTS = 5;
 export const VERIFICATION_TTL_MS = 1000 * 60 * 60 * 24;

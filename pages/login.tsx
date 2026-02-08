@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
-import { LoginPage } from "@/src/ui/host/LoginPage";
-import { signInWithPassword } from "@/src/services/auth/auth.write";
-import { ServiceError } from "@/src/shared/errors";
+import { LoginPage } from "@/ui/host/LoginPage";
+import { signInWithPassword } from "@/services/auth/auth.write";
+import { ServiceError } from "@/shared/errors";
 
 function getErrorMessage(error: unknown) {
   return error instanceof ServiceError ? error.message : "Something went wrong";
@@ -18,7 +18,7 @@ export default function Login() {
       console.log("LOGIN RESULT", { data, error: null });
 
       router.replace("/host");
-    } catch (err) {
+    } catch (err: unknown) {
       console.log("LOGIN RESULT", { data: null, error: err });
 
       const message = getErrorMessage(err);

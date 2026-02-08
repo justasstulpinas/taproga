@@ -1,25 +1,41 @@
-import { GuestVerificationRecord } from "@/src/domain/guest/guest.types";
-import { parseVerificationRecord } from "@/src/domain/guest/guest.rules";
+import { supabaseServiceRole } from '@/infra/supabase.service';
 
-export function getVerificationRecord(
-  key: string
-): GuestVerificationRecord | null {
-  const raw = sessionStorage.getItem(key);
-  if (!raw) return null;
+export async function resolveGuest(params: {
+  eventId: string;
+  name: string;
+}): Promise<{ guestId: string }> {
+  const normalized = params.name.trim().toLowerCase();
 
-  const parsed = parseVerificationRecord(raw);
-  if (!parsed) {
-    sessionStorage.removeItem(key);
-    return null;
+  // 1) Try find existing guest
+  const { data: existing, error: findErr } = await supabaseServiceRole
+    .from('guests')
+    .select('id')
+    .eq('event_id', params.eventId)
+    .eq('normalized_name', normalized)
+    .maybeSingle();
+
+  if (findErr) {
+    throw new Error('GUEST_LOOKUP_FAILED');
   }
 
-  return parsed;
-}
+  if (existing?.id) {
+    return { guestId: existing.id };
+  }
 
-export function getVerificationAttempts(key: string): number {
-  const rawAttempts = sessionStorage.getItem(key);
-  if (!rawAttempts) return 0;
+  // 2) Create if not exists
+  const { data: created, error: createErr } = await supabaseServiceRole
+    .from('guests')
+    .insert({
+      event_id: params.eventId,
+      name: params.name,
+      normalized_name: normalized,
+    })
+    .select('id')
+    .single();
 
-  const parsed = parseInt(rawAttempts, 10);
-  return Number.isNaN(parsed) ? 0 : parsed;
+  if (createErr || !created) {
+    throw new Error('GUEST_CREATE_FAILED');
+  }
+
+  return { guestId: created.id };
 }

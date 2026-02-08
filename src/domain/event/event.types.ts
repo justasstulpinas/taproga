@@ -31,3 +31,17 @@ export type NewEventInput = {
   time: string;
   timezone: string;
 };
+
+export type EventState =
+  | 'draft'
+  | 'paid'
+  | 'active'
+  | 'locked'
+  | 'archived';
+
+export type EventForRSVP = {
+  id: string;
+  state: EventState;
+  guest_access_enabled: boolean;
+  rsvp_deadline: string | null; // ISO
+};

@@ -1,4 +1,4 @@
-import { EventSummary } from "@/src/domain/event/event.types";
+import { EventSummary } from "@/domain/event/event.types";
 
 export type HostHomePageProps = {
   events: EventSummary[];

@@ -1,8 +1,6 @@
-import { supabaseClient } from "@/src/infra/supabase.client";
-import { ServiceError } from "@/src/shared/errors";
-import {
-  EventSummary,
-} from "@/src/domain/event/event.types";
+import { supabaseClient } from "@/infra/supabase.client";
+import { ServiceError } from "@/shared/errors";
+import { EventSummary } from "@/domain/event/event.types";
 
 export async function listHostEvents(): Promise<EventSummary[]> {
   const { data: rows, error } = await supabaseClient
@@ -30,4 +28,31 @@ export async function countEventsBySlugPrefix(
   }
 
   return count;
+}
+
+export type PublicEventRow = {
+  id: string;
+  title: string;
+  event_date: string;
+  state: string;
+  guest_access_enabled: boolean;
+  slug: string;
+};
+
+export async function getPublicEventBySlug(
+  slug: string
+): Promise<PublicEventRow | null> {
+  const { supabaseServiceRole } = await import("@/infra/supabase.service");
+
+  const { data } = await supabaseServiceRole
+    .from("events")
+    .select("id,title,event_date,state,guest_access_enabled,slug")
+    .eq("slug", slug)
+    .single();
+
+  if (!data) {
+    return null;
+  }
+
+  return data as PublicEventRow;
 }

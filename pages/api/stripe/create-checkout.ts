@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { createCheckoutSession } from "@/src/services/payments/payments.write";
-import { ServiceError } from "@/src/shared/errors";
+import { createCheckoutSession } from "@/services/payments/payments.write";
+import { ServiceError } from "@/shared/errors";
 
 export default async function handler(
   req: NextApiRequest,
@@ -21,7 +21,7 @@ export default async function handler(
     });
 
     return res.status(200).json({ url: session.url });
-  } catch (err) {
+  } catch (err: unknown) {
     if (err instanceof ServiceError) {
       if (err.code === "BAD_REQUEST") {
         return res.status(400).json({ error: err.message });
