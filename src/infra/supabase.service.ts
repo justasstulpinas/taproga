@@ -5,3 +5,4 @@ export const supabaseServiceRole = createClient(
   ENV.SUPABASE_URL,
   ENV.SUPABASE_SERVICE_ROLE_KEY
 );
+

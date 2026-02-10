@@ -5,3 +5,5 @@ export const supabaseClient = createClient(
   ENV.SUPABASE_URL,
   ENV.SUPABASE_ANON_KEY
 );
+
+export const supabase = supabaseClient;
