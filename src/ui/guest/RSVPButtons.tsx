@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/infra/supabase.client";
 
 type Props = {
   eventId: string;
@@ -21,9 +22,33 @@ export default function RSVPButtons({
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorCode | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [rsvpStatus, setRsvpStatus] = useState<"yes" | "no" | null>(null);
 
-  async function submit(rsvpStatus: "yes" | "no") {
+  // --------------------------------------------------
+  // RESTORE RSVP FROM DB ON MOUNT
+  // --------------------------------------------------
+
+  useEffect(() => {
+    async function loadRSVP() {
+      const { data } = await supabase
+        .from("guests")
+        .select("rsvp")
+        .eq("id", guestId)
+        .single();
+
+      if (!data) return;
+
+      if (data.rsvp && data.rsvp !== "pending") {
+        setRsvpStatus(data.rsvp);
+      }
+    }
+
+    if (guestId) {
+      loadRSVP();
+    }
+  }, [guestId]);
+
+  async function submit(status: "yes" | "no") {
     setLoading(true);
     setError(null);
 
@@ -34,7 +59,7 @@ export default function RSVPButtons({
         body: JSON.stringify({
           eventId,
           guestId,
-          rsvpStatus,
+          rsvpStatus: status,
           verified,
         }),
       });
@@ -47,7 +72,7 @@ export default function RSVPButtons({
         return;
       }
 
-      setSuccess(true);
+      setRsvpStatus(status);
     } catch {
       setError("INTERNAL_ERROR");
     } finally {
@@ -55,8 +80,16 @@ export default function RSVPButtons({
     }
   }
 
-  if (success) {
-    return <p className="mt-4">Ačiū, jūsų atsakymas išsaugotas.</p>;
+  // --------------------------------------------------
+  // RENDER
+  // --------------------------------------------------
+
+  if (rsvpStatus) {
+    return (
+      <p className="mt-4">
+        Ačiū, jūsų atsakymas išsaugotas.
+      </p>
+    );
   }
 
   return (
@@ -78,7 +111,9 @@ export default function RSVPButtons({
       </button>
 
       {error && (
-        <p className="text-sm text-red-600 mt-2">{error}</p>
+        <p className="text-sm text-red-600 mt-2">
+          {error}
+        </p>
       )}
     </div>
   );

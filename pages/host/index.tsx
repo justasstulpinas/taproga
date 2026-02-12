@@ -8,7 +8,9 @@ import { EventSummary } from "@/domain/event/event.types";
 import { ServiceError } from "@/shared/errors";
 
 function getErrorMessage(error: unknown) {
-  return error instanceof ServiceError ? error.message : "Something went wrong";
+  return error instanceof ServiceError
+    ? error.message
+    : "Something went wrong";
 }
 
 export default function HostHome() {
@@ -22,15 +24,21 @@ export default function HostHome() {
     async function load() {
       try {
         const session = await getSession();
+
         if (!session) {
           router.replace("/login");
           return;
         }
 
         const rows = await listHostEvents();
-        if (isMounted) setEvents(rows);
+
+        if (isMounted) {
+          setEvents(rows);
+        }
       } catch (err: unknown) {
-        if (isMounted) setError(getErrorMessage(err));
+        if (isMounted) {
+          setError(getErrorMessage(err));
+        }
       }
     }
 
@@ -47,7 +55,9 @@ export default function HostHome() {
 
       setEvents((prev) =>
         prev.map((e) =>
-          e.id === id ? { ...e, guest_access_enabled: !enabled } : e
+          e.id === id
+            ? { ...e, guest_access_enabled: !enabled }
+            : e
         )
       );
     } catch (err: unknown) {

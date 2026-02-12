@@ -1,5 +1,4 @@
 import { supabaseServiceRole } from "@/infra/supabase.service";
-import { GuestVerificationRecord } from "@/domain/guest/guest.types";
 
 export type RSVPStatus = "yes" | "no";
 
@@ -22,6 +21,7 @@ type UpdateGuestRSVPInput = {
   eventId: string;
   guestId: string;
   rsvpStatus: RSVPStatus;
+  menuChoice: string | null;
   verified: boolean;
 };
 
@@ -29,6 +29,7 @@ export async function updateGuestRSVP({
   eventId,
   guestId,
   rsvpStatus,
+  menuChoice,
   verified,
 }: UpdateGuestRSVPInput): Promise<void> {
   if (!verified) {
@@ -38,8 +39,9 @@ export async function updateGuestRSVP({
   const { error, data } = await supabaseServiceRole
     .from("guests")
     .update({
-      rsvp_status: rsvpStatus,
+      rsvp: rsvpStatus, // FIXED COLUMN
       rsvp_at: new Date().toISOString(),
+      menu_choice: menuChoice,
     })
     .eq("id", guestId)
     .eq("event_id", eventId)
@@ -47,33 +49,10 @@ export async function updateGuestRSVP({
     .single();
 
   if (error) {
-    if (error.message.includes("RSVP_DEADLINE_PASSED")) {
-      throw new RSVPError("RSVP_DEADLINE_PASSED");
-    }
-
     throw new RSVPError("UNKNOWN");
   }
 
   if (!data) {
     throw new RSVPError("GUEST_NOT_FOUND");
   }
-}
-
-export function setVerificationRecord(
-  key: string,
-  record: GuestVerificationRecord
-) {
-  sessionStorage.setItem(key, JSON.stringify(record));
-}
-
-export function clearVerificationRecord(key: string) {
-  sessionStorage.removeItem(key);
-}
-
-export function setVerificationAttempts(key: string, attempts: number) {
-  sessionStorage.setItem(key, String(attempts));
-}
-
-export function clearVerificationAttempts(key: string) {
-  sessionStorage.removeItem(key);
 }

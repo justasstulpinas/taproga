@@ -1,21 +1,18 @@
 import { GetServerSideProps } from "next";
 import Head from "next/head";
 import { useEffect, useState } from "react";
-
+import { supabase } from "@/infra/supabase.client";
 import { getPublicEventBySlug } from "@/services/event/event.read";
-
 import {
   buildVerificationPhrase,
   canGuestViewEvent,
 } from "@/domain/event/event.rules";
-
 import {
   isLockedOut,
   isVerificationExpired,
   nextVerificationAttempts,
   validateVerificationInput,
 } from "@/domain/guest/verification.rules";
-
 import {
   getVerificationAttempts,
   setVerificationAttempts,
@@ -24,13 +21,9 @@ import {
   setVerificationRecord,
   clearVerificationRecord,
 } from "@/services/guest/verification.storage";
-
 import { GuestVerificationForm } from "@/ui/guest/GuestVerificationForm";
 import { Countdown } from "@/ui/guest/Countdown";
 import RSVPButtons from "@/ui/guest/RSVPButtons";
-import { canGuestEditMenu } from '../../lib/guards/menuAccess'
-
-
 
 type EventState = "draft" | "paid" | "active" | "locked" | "archived";
 
@@ -40,6 +33,7 @@ type EventPublic = {
   event_date: string;
   state: EventState;
   verificationPhrase: string;
+  lastCriticalUpdateAt: string | null;
 };
 
 type Props = {
@@ -52,20 +46,13 @@ export default function PublicEventPage({ event }: Props) {
 
   const [verifiedName, setVerifiedName] = useState<string | null>(null);
   const [guestId, setGuestId] = useState<string | null>(null);
-
   const [inputName, setInputName] = useState("");
   const [inputPhrase, setInputPhrase] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(0);
+  const [showBanner, setShowBanner] = useState(false);
 
-  const date = new Date(event.event_date);
-  const formattedDate = date.toLocaleDateString("lt-LT", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
-  // Restore verification from sessionStorage
+  // Restore verification
   useEffect(() => {
     const storedAttempts = getVerificationAttempts(ATTEMPTS_KEY);
     setAttempts(storedAttempts);
@@ -73,15 +60,13 @@ export default function PublicEventPage({ event }: Props) {
     const record = getVerificationRecord(VERIFY_KEY);
     if (!record) return;
 
-    const now = Date.now();
-    if (isVerificationExpired(record.verifiedAt, now)) {
+    if (isVerificationExpired(record.verifiedAt, Date.now())) {
       clearVerificationRecord(VERIFY_KEY);
       return;
     }
 
     setVerifiedName(record.name);
 
-    // resolve guest via API (server-only service role)
     fetch("/api/resolve-guest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -90,13 +75,43 @@ export default function PublicEventPage({ event }: Props) {
         name: record.name,
       }),
     })
-      .then(async (res) => {
-        if (!res.ok) throw new Error();
-        return res.json();
-      })
-      .then((data) => setGuestId(data.guestId))
-      .catch(() => setError("Guest resolution failed."));
-  }, [ATTEMPTS_KEY, VERIFY_KEY, event.id]);
+      .then((res) => res.json())
+      .then((data) => setGuestId(data.guestId));
+  }, [event.id]);
+
+  // One-time banner logic
+  useEffect(() => {
+    async function checkUpdate() {
+      if (!guestId) return;
+      if (!event.lastCriticalUpdateAt) return;
+
+      const { data: guest } = await supabase
+        .from("guests")
+        .select("last_seen_update_at")
+        .eq("id", guestId)
+        .single();
+
+      const eventTime = new Date(event.lastCriticalUpdateAt).getTime();
+      const seenTime = guest?.last_seen_update_at
+        ? new Date(guest.last_seen_update_at).getTime()
+        : 0;
+
+      if (seenTime < eventTime) {
+        setShowBanner(true);
+
+        await supabase
+          .from("guests")
+          .update({
+            last_seen_update_at: event.lastCriticalUpdateAt,
+          })
+          .eq("id", guestId);
+      } else {
+        setShowBanner(false);
+      }
+    }
+
+    checkUpdate();
+  }, [guestId, event.lastCriticalUpdateAt]);
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,41 +142,23 @@ export default function PublicEventPage({ event }: Props) {
     setAttempts(0);
     setError(null);
 
-    try {
-      const res = await fetch("/api/resolve-guest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId: event.id,
-          name: result.name,
-        }),
-      });
+    const res = await fetch("/api/resolve-guest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventId: event.id,
+        name: result.name,
+      }),
+    });
 
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
-      setGuestId(data.guestId);
-    } catch {
-      setError("Guest resolution failed.");
-    }
+    const data = await res.json();
+    setGuestId(data.guestId);
   };
-
-  const lockedOut = isLockedOut(attempts);
 
   return (
     <>
       <Head>
         <title>{event.title}</title>
-        <meta
-          name="description"
-          content={`Wedding invitation · ${event.title} · ${formattedDate}`}
-        />
-        <meta property="og:type" content="website" />
-        <meta property="og:title" content={event.title} />
-        <meta
-          property="og:description"
-          content={`Wedding invitation · ${formattedDate}`}
-        />
         <meta name="robots" content="noindex,nofollow" />
       </Head>
 
@@ -171,15 +168,20 @@ export default function PublicEventPage({ event }: Props) {
             inputName={inputName}
             inputPhrase={inputPhrase}
             error={error}
-            lockedOut={lockedOut}
+            lockedOut={isLockedOut(attempts)}
             onNameChange={setInputName}
             onPhraseChange={setInputPhrase}
             onSubmit={handleVerify}
           />
         ) : (
-          <div className="text-center">
+          <div className="text-center max-w-md w-full">
+            {showBanner && (
+              <div className="bg-yellow-100 border border-yellow-300 p-3 mb-4 text-sm rounded">
+                Informacija buvo atnaujinta.
+              </div>
+            )}
+
             <h1 className="text-3xl font-semibold mb-4">{event.title}</h1>
-            <p className="text-lg">{formattedDate}</p>
             <Countdown eventDate={event.event_date} />
 
             {guestId && (
@@ -198,20 +200,10 @@ export default function PublicEventPage({ event }: Props) {
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const slug = ctx.params?.slug;
-
-  if (typeof slug !== "string") {
-    return { notFound: true };
-  }
+  if (typeof slug !== "string") return { notFound: true };
 
   const data = await getPublicEventBySlug(slug);
-
-  if (!data) {
-    return { notFound: true };
-  }
-
-  if (!canGuestViewEvent(data)) {
-    return { notFound: true };
-  }
+  if (!data || !canGuestViewEvent(data)) return { notFound: true };
 
   return {
     props: {
@@ -221,6 +213,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         event_date: data.event_date,
         state: data.state as EventState,
         verificationPhrase: buildVerificationPhrase(data.slug),
+        lastCriticalUpdateAt: data.last_critical_update_at ?? null,
       },
     },
   };

@@ -3,24 +3,12 @@ import Head from "next/head";
 import { useEffect, useState } from "react";
 
 import { supabase } from "@/infra/supabase.client";
-import {
-  buildVerificationPhrase,
-  canGuestViewEvent,
-} from "@/domain/event/event.rules";
+import { buildVerificationPhrase, canGuestViewEvent } from "@/domain/event/event.rules";
 import {
   isLockedOut,
-  isVerificationExpired,
   nextVerificationAttempts,
   validateVerificationInput,
 } from "@/domain/guest/verification.rules";
-import {
-  getVerificationAttempts,
-  setVerificationAttempts,
-  clearVerificationAttempts,
-  getVerificationRecord,
-  setVerificationRecord,
-  clearVerificationRecord,
-} from "@/services/guest/verification.storage";
 import { GuestVerificationForm } from "@/ui/guest/GuestVerificationForm";
 import { Countdown } from "@/ui/guest/Countdown";
 
@@ -34,24 +22,15 @@ type EventPublic = {
   guest_access_enabled: boolean;
   slug: string;
   menu_enabled: boolean;
+  last_critical_update_at: string | null;
 };
 
 type Props = {
   event: EventPublic;
 };
 
-type ErrorCode =
-  | "NOT_VERIFIED"
-  | "EVENT_NOT_ACTIVE"
-  | "GUEST_ACCESS_DISABLED"
-  | "RSVP_DEADLINE_PASSED"
-  | "GUEST_NOT_FOUND"
-  | "INTERNAL_ERROR"
-  | "MENU_REQUIRED";
-
 export default function PublicEventPage({ event }: Props) {
-  const VERIFY_KEY = `guest_verified_${event.id}`;
-  const ATTEMPTS_KEY = `guest_verify_attempts_${event.id}`;
+  const SESSION_KEY = `guest_session_${event.id}`;
 
   const [verifiedName, setVerifiedName] = useState<string | null>(null);
   const [guestId, setGuestId] = useState<string | null>(null);
@@ -62,73 +41,107 @@ export default function PublicEventPage({ event }: Props) {
   const [attempts, setAttempts] = useState(0);
 
   const [menuChoice, setMenuChoice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [rsvpError, setRsvpError] = useState<ErrorCode | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [menus, setMenus] = useState<{ id: string; title: string }[]>([]);
 
-  const date = new Date(event.event_date);
-  const formattedDate = date.toLocaleDateString("lt-LT", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const [rsvpStatus, setRsvpStatus] = useState<string | null>(null);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const verificationPhrase = buildVerificationPhrase(event.slug);
 
+  // ---------------------------------------------------
+  // Restore session
+  // ---------------------------------------------------
+
   useEffect(() => {
-    const storedAttempts = getVerificationAttempts(ATTEMPTS_KEY);
-    setAttempts(storedAttempts);
-
-    const record = getVerificationRecord(VERIFY_KEY);
-    if (!record) return;
-
-    const now = Date.now();
-    if (isVerificationExpired(record.verifiedAt, now)) {
-      clearVerificationRecord(VERIFY_KEY);
-      return;
+    const storedGuestId = sessionStorage.getItem(SESSION_KEY);
+    if (storedGuestId) {
+      setGuestId(storedGuestId);
+      setVerifiedName("verified");
     }
+  }, [SESSION_KEY]);
 
-    setVerifiedName(record.name);
-
-    fetch("/api/resolve-guest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        eventId: event.id,
-        name: record.name,
-      }),
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error();
-        return res.json();
-      })
-      .then((data) => setGuestId(data.guestId))
-      .catch(() => setError("Guest resolution failed."));
-  }, [ATTEMPTS_KEY, VERIFY_KEY, event.id]);
+  // ---------------------------------------------------
+  // Restore RSVP + menu from DB
+  // ---------------------------------------------------
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadMenuChoice() {
+    async function loadGuestState() {
       if (!guestId) return;
 
       const { data } = await supabase
         .from("guests")
-        .select("menu_choice")
+        .select("rsvp, menu_choice")
         .eq("id", guestId)
-        .eq("event_id", event.id)
         .single();
 
-      if (!isMounted) return;
-      setMenuChoice(data?.menu_choice ?? null);
+      if (!data) return;
+
+      if (data.menu_choice) {
+        setMenuChoice(data.menu_choice);
+      }
+
+      // IMPORTANT: use rsvp column
+      if (data.rsvp && data.rsvp !== "pending") {
+        setRsvpStatus(data.rsvp);
+      }
     }
 
-    loadMenuChoice();
+    loadGuestState();
+  }, [guestId]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [event.id, guestId]);
+  // ---------------------------------------------------
+  // Banner logic
+  // ---------------------------------------------------
+
+  useEffect(() => {
+    async function runUpdateCheck() {
+      if (!guestId) return;
+      if (!event.last_critical_update_at) return;
+
+      const { data: guest } = await supabase
+        .from("guests")
+        .select("last_seen_update_at")
+        .eq("id", guestId)
+        .single();
+
+      if (
+        !guest?.last_seen_update_at ||
+        new Date(guest.last_seen_update_at).getTime() <
+          new Date(event.last_critical_update_at).getTime()
+      ) {
+        setShowUpdateBanner(true);
+
+        await supabase
+          .from("guests")
+          .update({
+            last_seen_update_at: new Date().toISOString(),
+          })
+          .eq("id", guestId);
+      }
+    }
+
+    runUpdateCheck();
+  }, [guestId, event.last_critical_update_at]);
+
+  // ---------------------------------------------------
+  // Load menus
+  // ---------------------------------------------------
+
+  useEffect(() => {
+    if (!event.menu_enabled) return;
+
+    supabase
+      .from("menus")
+      .select("id,title")
+      .eq("event_id", event.id)
+      .eq("is_active", true)
+      .then(({ data }) => setMenus(data ?? []));
+  }, [event.id, event.menu_enabled]);
+
+  // ---------------------------------------------------
+  // Verification
+  // ---------------------------------------------------
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,98 +155,56 @@ export default function PublicEventPage({ event }: Props) {
     );
 
     if (!result.ok) {
-      const next = nextVerificationAttempts(attempts);
-      setVerificationAttempts(ATTEMPTS_KEY, next);
-      setAttempts(next);
+      setAttempts(nextVerificationAttempts(attempts));
       setError("Verification failed.");
       return;
     }
 
-    setVerificationRecord(VERIFY_KEY, {
-      name: result.name,
-      verifiedAt: new Date().toISOString(),
+    const res = await fetch("/api/resolve-guest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId: event.id, name: result.name }),
     });
 
-    clearVerificationAttempts(ATTEMPTS_KEY);
+    const data = await res.json();
+
+    setGuestId(data.guestId);
     setVerifiedName(result.name);
-    setAttempts(0);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/resolve-guest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId: event.id,
-          name: result.name,
-        }),
-      });
-
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
-      setGuestId(data.guestId);
-    } catch {
-      setError("Guest resolution failed.");
-    }
+    sessionStorage.setItem(SESSION_KEY, data.guestId);
   };
 
-  async function submit(rsvpStatus: "yes" | "no") {
+  // ---------------------------------------------------
+  // RSVP submit
+  // ---------------------------------------------------
+
+  async function submit(status: "yes" | "no") {
     if (!guestId) return;
 
     setLoading(true);
-    setRsvpError(null);
 
-    if (event.menu_enabled && !menuChoice) {
-      setRsvpError("MENU_REQUIRED");
-      setLoading(false);
-      return;
-    }
+    await fetch("/api/rsvp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventId: event.id,
+        guestId,
+        rsvpStatus: status,
+        menuChoice,
+      }),
+    });
 
-    try {
-      const res = await fetch("/api/rsvp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId: event.id,
-          guestId,
-          rsvpStatus,
-          verified: true,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setRsvpError(data.error ?? "INTERNAL_ERROR");
-        setLoading(false);
-        return;
-      }
-
-      setSuccess(true);
-    } catch {
-      setRsvpError("INTERNAL_ERROR");
-    } finally {
-      setLoading(false);
-    }
+    setRsvpStatus(status);
+    setLoading(false);
   }
 
-  const lockedOut = isLockedOut(attempts);
+  // ---------------------------------------------------
+  // Render
+  // ---------------------------------------------------
 
   return (
     <>
       <Head>
         <title>{event.title}</title>
-        <meta
-          name="description"
-          content={`Wedding invitation · ${event.title} · ${formattedDate}`}
-        />
-        <meta property="og:type" content="website" />
-        <meta property="og:title" content={event.title} />
-        <meta
-          property="og:description"
-          content={`Wedding invitation · ${formattedDate}`}
-        />
         <meta name="robots" content="noindex,nofollow" />
       </Head>
 
@@ -243,44 +214,46 @@ export default function PublicEventPage({ event }: Props) {
             inputName={inputName}
             inputPhrase={inputPhrase}
             error={error}
-            lockedOut={lockedOut}
+            lockedOut={isLockedOut(attempts)}
             onNameChange={setInputName}
             onPhraseChange={setInputPhrase}
             onSubmit={handleVerify}
           />
         ) : (
-          <div className="text-center">
-            <h1 className="text-3xl font-semibold mb-4">{event.title}</h1>
-            <p className="text-lg">{formattedDate}</p>
+          <div className="max-w-md w-full">
+
+            {showUpdateBanner && (
+              <div className="bg-yellow-100 border border-yellow-300 text-sm p-3 mb-4 rounded text-center">
+                Informacija buvo atnaujinta.
+              </div>
+            )}
+
+            <h1 className="text-2xl font-semibold mb-4 text-center">
+              {event.title}
+            </h1>
+
             <Countdown eventDate={event.event_date} />
 
-            {success ? (
-              <p className="mt-4">Ačiū, jūsų atsakymas išsaugotas.</p>
+            {rsvpStatus ? (
+              <p className="mt-6 text-center">
+                Ačiū, jūsų atsakymas išsaugotas.
+              </p>
             ) : (
-              <div className="mt-6 space-y-3">
+              <div className="mt-6 space-y-2">
                 <button
-                  disabled={loading}
                   onClick={() => submit("yes")}
                   className="w-full bg-black text-white py-2"
+                  disabled={loading}
                 >
                   Dalyvausiu
                 </button>
-
                 <button
-                  disabled={loading}
                   onClick={() => submit("no")}
                   className="w-full border py-2"
+                  disabled={loading}
                 >
                   Nedalyvausiu
                 </button>
-
-                {rsvpError && (
-                  <p className="text-sm text-red-600 mt-2">
-                    {rsvpError === "MENU_REQUIRED"
-                      ? "Please select a menu option before submitting RSVP."
-                      : rsvpError}
-                  </p>
-                )}
               </div>
             )}
           </div>
@@ -292,38 +265,15 @@ export default function PublicEventPage({ event }: Props) {
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const slug = ctx.params?.slug;
+  if (typeof slug !== "string") return { notFound: true };
 
-  if (typeof slug !== "string") {
-    return { notFound: true };
-  }
-
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("events")
-    .select(
-      "id,title,event_date,state,guest_access_enabled,slug,menu_enabled"
-    )
+    .select("id,title,event_date,state,guest_access_enabled,slug,menu_enabled,last_critical_update_at")
     .eq("slug", slug)
     .single();
 
-  if (error || !data) {
-    return { notFound: true };
-  }
+  if (!data || !canGuestViewEvent(data)) return { notFound: true };
 
-  if (!canGuestViewEvent(data)) {
-    return { notFound: true };
-  }
-
-  return {
-    props: {
-      event: {
-        id: data.id,
-        title: data.title,
-        event_date: data.event_date,
-        state: data.state as EventState,
-        guest_access_enabled: Boolean(data.guest_access_enabled),
-        slug: data.slug,
-        menu_enabled: Boolean(data.menu_enabled),
-      },
-    },
-  };
+  return { props: { event: data } };
 };

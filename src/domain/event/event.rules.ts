@@ -1,5 +1,4 @@
-import { NewEventInput } from "@/src/domain/event/event.types";
-import { EventForRSVP } from './event.types';
+import { NewEventInput, EventForRSVP } from "@/domain/event/event.types";
 
 export function slugifyEventTitle(input: string): string {
   return input
@@ -31,16 +30,13 @@ export function buildEventDate(date: string, time: string): Date {
 }
 
 export function getNewEventValidationError(
-  input: Pick<NewEventInput, "title" | "date" | "time">
+  input: Pick<NewEventInput, "title" | "event_date">
 ): string | null {
   if (!input.title.trim()) {
     return "Title is required";
   }
-  if (!input.date) {
+  if (!input.event_date) {
     return "Date is required";
-  }
-  if (!input.time) {
-    return "Time is required";
   }
   return null;
 }

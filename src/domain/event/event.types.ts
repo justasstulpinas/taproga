@@ -1,4 +1,12 @@
-import { EventState } from "@/src/shared/constants";
+export const EventState = {
+  Draft: "draft",
+  Paid: "paid",
+  Active: "active",
+  Locked: "locked",
+  Archived: "archived",
+} as const;
+
+export type EventState = (typeof EventState)[keyof typeof EventState];
 
 export type EventRowForPublic = {
   id: string;
@@ -27,21 +35,13 @@ export type EventSummary = {
 
 export type NewEventInput = {
   title: string;
-  date: string;
-  time: string;
-  timezone: string;
+  event_date: string;
+  tier?: 1 | 2 | 3;
 };
-
-export type EventState =
-  | 'draft'
-  | 'paid'
-  | 'active'
-  | 'locked'
-  | 'archived';
 
 export type EventForRSVP = {
   id: string;
   state: EventState;
   guest_access_enabled: boolean;
-  rsvp_deadline: string | null; // ISO
+  rsvp_deadline: string | null;
 };
