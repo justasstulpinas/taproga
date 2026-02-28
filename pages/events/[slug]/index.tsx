@@ -3,7 +3,7 @@ import Head from "next/head";
 import { useEffect, useState } from "react";
 
 import { supabase } from "@/infra/supabase.client";
-import { buildVerificationPhrase, canGuestViewEvent } from "@/domain/event/event.rules";
+import { buildVerificationPhrase } from "@/domain/event/event.rules";
 import {
   isLockedOut,
   nextVerificationAttempts,
@@ -23,11 +23,106 @@ type EventPublic = {
   slug: string;
   menu_enabled: boolean;
   last_critical_update_at: string | null;
+  post_event_enabled: boolean;
+  storage_grace_until: string | null;
 };
 
 type Props = {
   event: EventPublic;
 };
+
+type EventPhoto = {
+  id: string;
+  signedUrl: string;
+  created_at: string;
+};
+
+function PostEventLayout({
+  eventId,
+  canShowGallery,
+}: {
+  eventId: string;
+  canShowGallery: boolean;
+}) {
+  const [photos, setPhotos] = useState<EventPhoto[]>([]);
+  const [loading, setLoading] = useState(canShowGallery);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadPhotos() {
+      if (!canShowGallery) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/events/${eventId}/photos`);
+        if (!response.ok) {
+          throw new Error("PHOTO_LIST_FAILED");
+        }
+
+        const data = (await response.json()) as EventPhoto[];
+        if (isMounted) {
+          setPhotos(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        if (isMounted) {
+          setError("Failed to load photos.");
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadPhotos();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [eventId, canShowGallery]);
+
+  return (
+    <div className="max-w-3xl w-full space-y-4">
+      <h1 className="text-2xl font-semibold text-center">Post-event photos</h1>
+
+      {!canShowGallery && (
+        <p className="text-center text-sm text-gray-600">
+          Photo gallery is no longer available.
+        </p>
+      )}
+
+      {canShowGallery && loading && (
+        <p className="text-center text-sm text-gray-600">Loading photos...</p>
+      )}
+
+      {canShowGallery && error && (
+        <p className="text-center text-sm text-red-600">{error}</p>
+      )}
+
+      {canShowGallery && !loading && !error && photos.length === 0 && (
+        <p className="text-center text-sm text-gray-600">No photos yet.</p>
+      )}
+
+      {canShowGallery && photos.length > 0 && (
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {photos.map((photo) => (
+            <li key={photo.id} className="overflow-hidden rounded border">
+              <img
+                src={photo.signedUrl}
+                alt="Event photo"
+                className="h-64 w-full object-cover"
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default function PublicEventPage({ event }: Props) {
   const SESSION_KEY = `guest_session_${event.id}`;
@@ -48,6 +143,20 @@ export default function PublicEventPage({ event }: Props) {
   const [loading, setLoading] = useState(false);
 
   const verificationPhrase = buildVerificationPhrase(event.slug);
+  const eventDateMs = new Date(event.event_date).getTime();
+  const postEventStartsAtMs = Number.isNaN(eventDateMs)
+    ? Number.POSITIVE_INFINITY
+    : eventDateMs + 12 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  const isPostEvent = nowMs > postEventStartsAtMs;
+  const graceMs = event.storage_grace_until
+    ? new Date(event.storage_grace_until).getTime()
+    : Number.NaN;
+  const isStorageExpired =
+    !Number.isFinite(graceMs) || nowMs > graceMs;
+  const shouldRenderPostEventLayout =
+    isPostEvent && event.post_event_enabled === true;
+  const disableRsvp = isPostEvent && event.post_event_enabled !== true;
 
   // ---------------------------------------------------
   // Restore session
@@ -221,6 +330,13 @@ export default function PublicEventPage({ event }: Props) {
           />
         ) : (
           <div className="max-w-md w-full">
+            {shouldRenderPostEventLayout ? (
+              <PostEventLayout
+                eventId={event.id}
+                canShowGallery={!isStorageExpired}
+              />
+            ) : (
+              <>
 
             {showUpdateBanner && (
               <div className="bg-yellow-100 border border-yellow-300 text-sm p-3 mb-4 rounded text-center">
@@ -237,6 +353,10 @@ export default function PublicEventPage({ event }: Props) {
             {rsvpStatus ? (
               <p className="mt-6 text-center">
                 Ačiū, jūsų atsakymas išsaugotas.
+              </p>
+            ) : disableRsvp ? (
+              <p className="mt-6 text-center text-sm text-gray-600">
+                RSVP is closed for this event.
               </p>
             ) : (
               <div className="mt-6 space-y-2">
@@ -256,6 +376,8 @@ export default function PublicEventPage({ event }: Props) {
                 </button>
               </div>
             )}
+              </>
+            )}
           </div>
         )}
       </main>
@@ -267,13 +389,20 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const slug = ctx.params?.slug;
   if (typeof slug !== "string") return { notFound: true };
 
-  const { data } = await supabase
+  const { data: event, error } = await supabase
     .from("events")
-    .select("id,title,event_date,state,guest_access_enabled,slug,menu_enabled,last_critical_update_at")
+    .select("id,title,event_date,state,guest_access_enabled,slug,menu_enabled,last_critical_update_at,post_event_enabled,storage_grace_until")
     .eq("slug", slug)
     .single();
 
-  if (!data || !canGuestViewEvent(data)) return { notFound: true };
+  if (!event || error) return { notFound: true };
 
-  return { props: { event: data } };
+  if (
+    event.state !== "active" ||
+    event.guest_access_enabled !== true
+  ) {
+    return { notFound: true };
+  }
+
+  return { props: { event } };
 };

@@ -1,4 +1,4 @@
-import { EventState, NewEventInput } from "@/domain/event/event.types";
+import { NewEventInput } from "@/domain/event/event.types";
 import { supabaseClient } from "@/infra/supabase.client";
 import { requireSession } from "@/services/auth/auth.read";
 import { ServiceError } from "@/shared/errors";
@@ -18,33 +18,11 @@ function slugifyTitle(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function validateCreateEventInput(input: NewEventInput): {
-  title: string;
-  eventDateIso: string;
-} {
-  const title = input.title.trim();
+async function buildUniqueSlug(title: string): Promise<string> {
+  const baseSlug = slugifyTitle(title) || "event";
+  let candidate = baseSlug;
 
-  if (!title) {
-    throw new ServiceError("BAD_REQUEST", "Title is required");
-  }
-
-  if (!input.event_date) {
-    throw new ServiceError("BAD_REQUEST", "Event date is required");
-  }
-
-  const parsedDate = new Date(input.event_date);
-  if (Number.isNaN(parsedDate.getTime())) {
-    throw new ServiceError("BAD_REQUEST", "Event date is invalid");
-  }
-
-  return { title, eventDateIso: parsedDate.toISOString() };
-}
-
-async function buildUniqueSlug(baseSlug: string): Promise<string> {
-  let suffix = 1;
-  let candidate = baseSlug || "event";
-
-  while (suffix < 1000) {
+  for (let suffix = 1; suffix < 1000; suffix += 1) {
     const { count, error } = await supabaseClient
       .from("events")
       .select("id", { head: true, count: "exact" })
@@ -54,21 +32,20 @@ async function buildUniqueSlug(baseSlug: string): Promise<string> {
       throw new ServiceError("SUPABASE_ERROR", error.message, error);
     }
 
-    if (!count) {
+    if ((count ?? 0) === 0) {
       return candidate;
     }
 
-    suffix += 1;
-    candidate = `${baseSlug || "event"}-${suffix}`;
+    candidate = `${baseSlug}-${suffix + 1}`;
   }
 
-  throw new ServiceError("SUPABASE_ERROR", "Failed to generate unique slug");
+  throw new ServiceError("SUPABASE_ERROR", "Failed to generate clean slug");
 }
 
 export async function createEvent(input: NewEventInput) {
   const session = await requireSession();
-  const hostId = session.user.id?.trim();
-  const hostEmail = session.user.email?.trim().toLowerCase();
+  const hostId = session.user.id;
+  const hostEmail = session.user.email;
 
   if (!hostId) {
     throw new ServiceError("UNAUTHENTICATED", "Host id is required");
@@ -78,19 +55,27 @@ export async function createEvent(input: NewEventInput) {
     throw new ServiceError("UNAUTHENTICATED", "Host email is required");
   }
 
-  const { title, eventDateIso } = validateCreateEventInput(input);
-  const slug = await buildUniqueSlug(slugifyTitle(title));
+  if (!input.title?.trim()) {
+    throw new ServiceError("BAD_REQUEST", "Title is required");
+  }
+
+  if (!input.event_date) {
+    throw new ServiceError("BAD_REQUEST", "Event date is required");
+  }
+
+  const generatedSlug = await buildUniqueSlug(input.title);
+  const tier = input.tier ?? 1;
 
   const { data, error } = await supabaseClient
     .from("events")
     .insert({
-      title,
-      event_date: eventDateIso,
+      title: input.title,
+      slug: generatedSlug,
+      event_date: input.event_date,
+      tier,
       host_id: hostId,
       host_email: hostEmail,
-      slug,
-      tier: input.tier ?? 1,
-      state: EventState.Draft,
+      state: "draft",
     })
     .select("id, slug")
     .single();
@@ -103,20 +88,41 @@ export async function createEvent(input: NewEventInput) {
     );
   }
 
-  return data;
+  return {
+    id: data.id,
+    slug: data.slug,
+  };
 }
 
 export async function toggleGuestAccess(eventId: string, enabled: boolean) {
-  if (!eventId.trim()) {
+  const normalizedEventId = eventId.trim();
+  if (!normalizedEventId) {
     throw new ServiceError("BAD_REQUEST", "Event id is required");
   }
 
-  const { error } = await supabaseClient
+  const session = await requireSession();
+  const hostEmail = session.user.email?.trim().toLowerCase();
+
+  if (!hostEmail) {
+    throw new ServiceError("UNAUTHENTICATED", "Host email is required");
+  }
+
+  const { data, error } = await supabaseClient
     .from("events")
-    .update({ guest_access_enabled: !enabled })
-    .eq("id", eventId);
+    .update({
+      guest_access_enabled: enabled,
+      last_critical_update_at: new Date().toISOString(),
+    })
+    .eq("id", normalizedEventId)
+    .eq("host_email", hostEmail)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     throw new ServiceError("SUPABASE_ERROR", error.message, error);
+  }
+
+  if (!data) {
+    throw new ServiceError("NOT_FOUND", "Event not found");
   }
 }

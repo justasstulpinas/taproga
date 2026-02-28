@@ -59,7 +59,7 @@ export async function updateGuestRSVP({
     }
   }
 
-  const { error, data } = await supabaseService
+  const { error, data } = await supabaseServiceRole
     .from('guests')
     .update({
       rsvp_status: rsvpStatus,

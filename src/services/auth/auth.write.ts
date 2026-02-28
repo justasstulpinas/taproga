@@ -2,8 +2,10 @@ import { supabaseClient } from "@/infra/supabase.client";
 import { ServiceError } from "@/shared/errors";
 
 export async function signInWithPassword(email: string, password: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+
   const { data, error } = await supabaseClient.auth.signInWithPassword({
-    email,
+    email: normalizedEmail,
     password,
   });
 
@@ -19,53 +21,45 @@ function clearSupabaseSessionStorage() {
     return;
   }
 
-  const storageKeys = Object.keys(window.localStorage);
-  for (const key of storageKeys) {
-    const normalized = key.toLowerCase();
-    if (
-      normalized.includes("supabase.auth.token") ||
-      normalized.includes("supabase-auth-token") ||
-      normalized.startsWith("sb-")
-    ) {
-      window.localStorage.removeItem(key);
-    }
-  }
+  const stores: Storage[] = [window.localStorage, window.sessionStorage];
 
-  const sessionKeys = Object.keys(window.sessionStorage);
-  for (const key of sessionKeys) {
-    const normalized = key.toLowerCase();
-    if (
-      normalized.includes("supabase.auth.token") ||
-      normalized.includes("supabase-auth-token") ||
-      normalized.startsWith("sb-")
-    ) {
-      window.sessionStorage.removeItem(key);
+  for (const store of stores) {
+    for (const key of Object.keys(store)) {
+      const normalized = key.toLowerCase();
+      if (
+        normalized.includes("supabase.auth.token") ||
+        normalized.includes("supabase-auth-token") ||
+        normalized.startsWith("sb-")
+      ) {
+        store.removeItem(key);
+      }
     }
   }
 }
 
 function clearSupabaseSessionCookies() {
-  if (typeof document === "undefined") {
+  if (typeof document === "undefined" || typeof window === "undefined") {
     return;
   }
 
   const cookieNames = document.cookie
     .split(";")
-    .map((entry) => entry.trim().split("=")[0])
+    .map((part) => part.trim().split("=")[0])
     .filter(Boolean);
 
   for (const name of cookieNames) {
-    if (name.startsWith("sb-") || name === "supabase-auth-token") {
-      document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
-      document.cookie = `${name}=; Path=/; Domain=${window.location.hostname}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+    if (!name.startsWith("sb-") && name !== "supabase-auth-token") {
+      continue;
     }
+
+    document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+    document.cookie = `${name}=; Path=/; Domain=${window.location.hostname}; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
   }
 }
 
-export async function signOut() {
+export async function logout() {
   const { error } = await supabaseClient.auth.signOut({ scope: "local" });
 
-  // Always attempt local cleanup to prevent session persistence if stale tokens remain.
   clearSupabaseSessionStorage();
   clearSupabaseSessionCookies();
 
@@ -73,3 +67,5 @@ export async function signOut() {
     throw new ServiceError("SUPABASE_ERROR", error.message, error);
   }
 }
+
+export const signOut = logout;

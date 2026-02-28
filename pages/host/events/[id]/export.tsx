@@ -146,7 +146,7 @@ export default function HostEventExportPage({ eventId }: Props) {
 }
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
-  const eventId = ctx.params?.eventId;
+  const eventId = ctx.params?.id;
 
   if (typeof eventId !== "string") {
     return { notFound: true };

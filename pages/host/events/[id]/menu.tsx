@@ -9,15 +9,20 @@ type Props = {
   guestId: string;
 };
 
-export default function GuestMenu({ event, menus, guestId }: Props) {
-  const locked = !canGuestEditMenu(event);
+export default function GuestMenu({
+  event,
+  menus = [],
+  guestId = "",
+}: Partial<Props> = {}) {
+  const locked = event ? !canGuestEditMenu(event) : true;
 
   async function select(menuTitle: string) {
     if (locked) return;
+    if (!guestId) return;
     await supabase.from("guests").update({ menu_choice: menuTitle }).eq("id", guestId);
   }
 
-  if (!event.menu_enabled) return null;
+  if (!event?.menu_enabled) return null;
 
   return (
     <main className="p-6 max-w-xl mx-auto">

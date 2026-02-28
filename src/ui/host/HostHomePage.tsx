@@ -1,43 +1,57 @@
+import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/router";
 import { EventSummary } from "@/domain/event/event.types";
-import { signOut } from "@/services/auth/auth.write";
+import { logout } from "@/services/auth/auth.write";
 
 export type HostHomePageProps = {
   events: EventSummary[];
   error: string | null;
   onCreateEvent: () => void;
-  onToggleGuestAccess: (id: string, enabled: boolean) => void;
+  onToggleGuestAccess: (id: string, enabled: boolean) => Promise<void>;
 };
 
 export function HostHomePage({
   events,
   error,
   onCreateEvent,
-  onToggleGuestAccess: _onToggleGuestAccess,
+  onToggleGuestAccess,
 }: HostHomePageProps) {
-  const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [busyEventId, setBusyEventId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function handleLogout() {
+    setActionError(null);
+    setLoggingOut(true);
+
     try {
-      setLoggingOut(true);
-      setLogoutError(null);
-      await signOut();
-      await router.replace("/login");
+      await logout();
+      window.location.href = "/login";
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to log out. Please try again.";
-      setLogoutError(message);
+      const message = err instanceof Error ? err.message : "Failed to log out";
+      setActionError(message);
       setLoggingOut(false);
     }
   }
 
+  async function handleToggle(event: EventSummary) {
+    setActionError(null);
+    setBusyEventId(event.id);
+
+    try {
+      await onToggleGuestAccess(event.id, !event.guest_access_enabled);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to update event";
+      setActionError(message);
+    } finally {
+      setBusyEventId(null);
+    }
+  }
+
   return (
-    <main>
-      <div className="mb-4 flex items-center justify-between">
-        <h1>Host Dashboard</h1>
+    <main className="mx-auto max-w-4xl space-y-6 p-6">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Host Dashboard</h1>
         <button
           onClick={handleLogout}
           disabled={loggingOut}
@@ -45,53 +59,73 @@ export function HostHomePage({
         >
           {loggingOut ? "Logging out..." : "Logout"}
         </button>
-      </div>
+      </header>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {logoutError && <p className="text-sm text-red-600">{logoutError}</p>}
+      {actionError && <p className="text-sm text-red-600">{actionError}</p>}
 
-      <button onClick={onCreateEvent}>Create event</button>
+      <button
+        onClick={onCreateEvent}
+        className="rounded bg-black px-4 py-2 text-sm text-white"
+      >
+        Create event
+      </button>
 
-      <ul>
-        {events.map((event) => (
-          <li key={event.id}>
-            <div className="font-medium">{event.title}</div>
-            <div className="text-sm text-gray-600">{event.state}</div>
-            <div className="flex flex-wrap gap-2 mt-2">
-              <button
-                onClick={() => (window.location.href = `/host/events/${event.id}`)}
-                className="px-3 py-1.5 bg-black text-white text-sm rounded"
-              >
-                Open event
-              </button>
+      {events.length === 0 ? (
+        <p className="text-sm text-gray-600">No events yet.</p>
+      ) : (
+        <ul className="space-y-4">
+          {events.map((event) => {
+            const toggling = busyEventId === event.id;
 
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `${window.location.origin}/events/${event.slug}`
-                  );
-                  alert("Guest link copied");
-                }}
-                className="px-3 py-1.5 border text-sm rounded"
-              >
-                Copy guest link
-              </button>
+            return (
+              <li key={event.id} className="rounded border p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-lg font-medium">{event.title}</p>
+                    <p className="text-sm text-gray-600">State: {event.state}</p>
+                    <p className="text-sm text-gray-600">
+                      Guest access: {event.guest_access_enabled ? "Enabled" : "Disabled"}
+                    </p>
+                  </div>
 
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `${window.location.origin}/host/events/${event.id}`
-                  );
-                  alert("Host link copied");
-                }}
-                className="px-3 py-1.5 border text-sm rounded"
-              >
-                Copy host link
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/host/events/${event.id}`}
+                      className="rounded border px-3 py-1.5 text-sm"
+                    >
+                      Open event
+                    </Link>
+
+                    <button
+                      onClick={() => handleToggle(event)}
+                      disabled={toggling}
+                      className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+                    >
+                      {toggling
+                        ? "Saving..."
+                        : event.guest_access_enabled
+                        ? "Disable guest access"
+                        : "Enable guest access"}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        void navigator.clipboard.writeText(
+                          `${window.location.origin}/events/${event.slug}`
+                        );
+                      }}
+                      className="rounded border px-3 py-1.5 text-sm"
+                    >
+                      Copy guest link
+                    </button>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </main>
   );
 }

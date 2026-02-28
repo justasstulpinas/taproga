@@ -1,69 +1,98 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/router";
-import { HostHomePage } from "@/ui/host/HostHomePage";
+import type {
+  GetServerSideProps,
+  InferGetServerSidePropsType,
+} from "next";
+import type { EventSummary } from "@/domain/event/event.types";
+import { createSupabaseServerClient } from "@/infra/supabase.server";
 import { listHostEvents } from "@/services/event/event.read";
 import { toggleGuestAccess } from "@/services/event/event.write";
-import { getSession } from "@/services/auth/auth.read";
-import { EventSummary } from "@/domain/event/event.types";
 import { ServiceError } from "@/shared/errors";
+import { HostHomePage } from "@/ui/host/HostHomePage";
 
-function getErrorMessage(error: unknown) {
-  return error instanceof ServiceError
-    ? error.message
-    : "Something went wrong";
+type Props = {
+  initialEvents: EventSummary[];
+};
+
+function redirectToLogin() {
+  return {
+    redirect: {
+      destination: "/login",
+      permanent: false,
+    },
+  } as const;
 }
 
-export default function HostHome() {
+export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
+  const supabase = createSupabaseServerClient(ctx);
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError || !session) {
+    return redirectToLogin();
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  const hostEmail = user?.email?.trim().toLowerCase();
+  if (userError || !hostEmail) {
+    return redirectToLogin();
+  }
+
+  try {
+    const initialEvents = await listHostEvents(hostEmail, supabase);
+
+    return {
+      props: {
+        initialEvents,
+      },
+    };
+  } catch {
+    return {
+      props: {
+        initialEvents: [],
+      },
+    };
+  }
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof ServiceError) {
+    return error.message;
+  }
+
+  return error instanceof Error ? error.message : "Something went wrong";
+}
+
+export default function HostHomeRoute({
+  initialEvents,
+}: InferGetServerSidePropsType<typeof getServerSideProps>) {
   const router = useRouter();
-  const [events, setEvents] = useState<EventSummary[]>([]);
+  const [events, setEvents] = useState<EventSummary[]>(initialEvents);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function load() {
-      try {
-        const session = await getSession();
-
-        if (!session) {
-          router.replace("/login");
-          return;
-        }
-
-        const rows = await listHostEvents();
-
-        if (isMounted) {
-          setEvents(rows);
-        }
-      } catch (err: unknown) {
-        if (isMounted) {
-          setError(getErrorMessage(err));
-        }
-      }
-    }
-
-    load();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
-
   async function handleToggleGuestAccess(id: string, enabled: boolean) {
+    setError(null);
+
     try {
       await toggleGuestAccess(id, enabled);
 
-      setEvents((prev) =>
-        prev.map((e) =>
-          e.id === id
-            ? { ...e, guest_access_enabled: !enabled }
-            : e
+      setEvents((previous) =>
+        previous.map((event) =>
+          event.id === id
+            ? { ...event, guest_access_enabled: enabled }
+            : event
         )
       );
     } catch (err: unknown) {
-      const message = getErrorMessage(err);
-      setError(message);
-      alert(message);
+      setError(getErrorMessage(err));
     }
   }
 
@@ -71,7 +100,9 @@ export default function HostHome() {
     <HostHomePage
       events={events}
       error={error}
-      onCreateEvent={() => router.push("/host/new")}
+      onCreateEvent={() => {
+        void router.push("/host/new");
+      }}
       onToggleGuestAccess={handleToggleGuestAccess}
     />
   );

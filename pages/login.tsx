@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import { signInWithPassword } from "@/services/auth/auth.write";
+import { supabaseClient } from "@/infra/supabase.client";
 import { ServiceError } from "@/shared/errors";
 
 function getErrorMessage(error: unknown) {
@@ -17,18 +18,16 @@ export default function Login() {
     e.preventDefault();
 
     try {
-      const data = await signInWithPassword(email, password);
-      console.log("LOGIN RESULT", { data, error: null });
+      await signInWithPassword(email, password);
+      await supabaseClient.auth.getSession();
 
       const returnTo =
         typeof router.query.returnTo === "string"
           ? router.query.returnTo
           : "/host";
 
-      router.push(returnTo);
+      window.location.assign(returnTo);
     } catch (err: unknown) {
-      console.log("LOGIN RESULT", { data: null, error: err });
-
       const message = getErrorMessage(err);
       setError(message);
       alert(message);

@@ -1,5 +1,6 @@
 export type ServiceErrorCode =
   | "UNAUTHENTICATED"
+  | "FORBIDDEN"
   | "NOT_FOUND"
   | "BAD_REQUEST"
   | "SUPABASE_ERROR"

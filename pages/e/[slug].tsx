@@ -2,10 +2,8 @@ import { GetServerSideProps } from "next";
 import Head from "next/head";
 import { useEffect, useState } from "react";
 import { supabase } from "@/infra/supabase.client";
-import { getPublicEventBySlug } from "@/services/event/event.read";
 import {
   buildVerificationPhrase,
-  canGuestViewEvent,
 } from "@/domain/event/event.rules";
 import {
   isLockedOut,
@@ -202,18 +200,32 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const slug = ctx.params?.slug;
   if (typeof slug !== "string") return { notFound: true };
 
-  const data = await getPublicEventBySlug(slug);
-  if (!data || !canGuestViewEvent(data)) return { notFound: true };
+  const { data: event, error } = await supabase
+    .from("events")
+    .select(
+      "id,title,event_date,state,guest_access_enabled,slug,last_critical_update_at"
+    )
+    .eq("slug", slug)
+    .single();
+
+  if (!event || error) return { notFound: true };
+
+  if (
+    event.state !== "active" ||
+    event.guest_access_enabled !== true
+  ) {
+    return { notFound: true };
+  }
 
   return {
     props: {
       event: {
-        id: data.id,
-        title: data.title,
-        event_date: data.event_date,
-        state: data.state as EventState,
-        verificationPhrase: buildVerificationPhrase(data.slug),
-        lastCriticalUpdateAt: data.last_critical_update_at ?? null,
+        id: event.id,
+        title: event.title,
+        event_date: event.event_date,
+        state: event.state as EventState,
+        verificationPhrase: buildVerificationPhrase(event.slug),
+        lastCriticalUpdateAt: event.last_critical_update_at ?? null,
       },
     },
   };

@@ -26,6 +26,7 @@ type EventMenu = {
   title: string;
   state: string;
   menu_enabled: boolean;
+  rsvp_deadline: string | null;
   menu_options: string[] | null;
   slug: string;
 };
@@ -287,7 +288,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
   const { data, error } = await supabase
     .from("events")
-    .select("id,title,state,menu_enabled,menu_options,slug")
+    .select("id,title,state,menu_enabled,rsvp_deadline,menu_options,slug")
     .eq("slug", slug)
     .single();
 
@@ -302,6 +303,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         title: data.title,
         state: data.state,
         menu_enabled: Boolean(data.menu_enabled),
+        rsvp_deadline: data.rsvp_deadline ?? null,
         menu_options: data.menu_options ?? null,
         slug: data.slug,
       },
