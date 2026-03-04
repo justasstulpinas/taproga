@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { signInWithPassword } from "@/services/auth/auth.write";
+import { signInWithPassword, signUpWithPassword } from "@/services/auth/auth.write";
 import { supabaseClient } from "@/infra/supabase.client";
 import { ServiceError } from "@/shared/errors";
 
@@ -8,10 +8,11 @@ function getErrorMessage(error: unknown) {
   return error instanceof ServiceError ? error.message : "Something went wrong";
 }
 
-export default function Login() {
+export default function Register() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -23,13 +24,29 @@ export default function Login() {
     });
   }, []);
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (password !== confirmPassword) {
+      setError("Slaptažodžiai nesutampa.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Slaptažodis turi būti bent 6 simbolių.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await signInWithPassword(email, password);
+      const result = await signUpWithPassword(email, password);
+
+      if (!result.session) {
+        await signInWithPassword(email, password);
+      }
+
       window.location.assign("/host");
     } catch (err: unknown) {
       setError(getErrorMessage(err));
@@ -41,11 +58,11 @@ export default function Login() {
   return (
     <main className="min-h-screen bg-bg px-6 py-16 text-textPrimary">
       <div className="mx-auto w-full max-w-text space-y-8 text-center">
-        <h1>Login</h1>
-        <p className="muted">Prisijunkite su el. paštu ir slaptažodžiu.</p>
+        <h1>Register</h1>
+        <p className="muted">Sukurkite paskyrą su el. paštu ir slaptažodžiu.</p>
 
         <form
-          onSubmit={handleLogin}
+          onSubmit={handleRegister}
           className="rounded-2xl border border-borderSoft bg-white p-8 shadow-soft"
         >
           <div className="grid gap-4">
@@ -67,12 +84,21 @@ export default function Login() {
               required
             />
 
+            <input
+              type="password"
+              placeholder="Pakartokite slaptažodį"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full rounded-[12px] border border-borderSoft bg-white p-4 font-sans"
+              required
+            />
+
             <button
               type="submit"
               disabled={loading}
               className="rounded-pill bg-action px-10 py-4 text-white transition-all duration-300 ease-out hover:bg-actionActive active:scale-95 disabled:opacity-50"
             >
-              {loading ? "Jungiamasi..." : "Prisijungti"}
+              {loading ? "Registruojama..." : "Registruotis"}
             </button>
           </div>
 
@@ -82,11 +108,11 @@ export default function Login() {
         <button
           type="button"
           onClick={() => {
-            void router.push("/register");
+            void router.push("/login");
           }}
           className="rounded-pill border border-borderSoft px-8 py-3 text-sm transition-all duration-300 ease-out active:scale-95"
         >
-          Neturi paskyros? Registruotis
+          Jau turi paskyrą? Prisijungti
         </button>
       </div>
     </main>

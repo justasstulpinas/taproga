@@ -16,6 +16,36 @@ export async function signInWithPassword(email: string, password: string) {
   return data;
 }
 
+export async function signInWithMagicLink(email: string, redirectTo?: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const { data, error } = await supabaseClient.auth.signInWithOtp({
+    email: normalizedEmail,
+    options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+  });
+
+  if (error) {
+    throw new ServiceError("SUPABASE_ERROR", error.message, error);
+  }
+
+  return data;
+}
+
+export async function signUpWithPassword(email: string, password: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const { data, error } = await supabaseClient.auth.signUp({
+    email: normalizedEmail,
+    password,
+  });
+
+  if (error) {
+    throw new ServiceError("SUPABASE_ERROR", error.message, error);
+  }
+
+  return data;
+}
+
 function clearSupabaseSessionStorage() {
   if (typeof window === "undefined") {
     return;

@@ -91,7 +91,7 @@ export function HostHomePage({
 
                   <div className="flex flex-wrap items-center gap-2">
                     <Link
-                      href={`/host/events/${event.id}`}
+                      href={`/host/${event.id}`}
                       className="rounded border px-3 py-1.5 text-sm"
                     >
                       Open event

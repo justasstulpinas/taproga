@@ -49,7 +49,7 @@ export default function NewEventPage() {
 
     try {
       const created = await createEvent(input);
-      await router.replace(`/host/events/${created.id}`);
+      await router.replace(`/host/${created.id}`);
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       setError(message);

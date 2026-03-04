@@ -2,6 +2,7 @@ import { NewEventInput } from "@/domain/event/event.types";
 import { supabaseClient } from "@/infra/supabase.client";
 import { requireSession } from "@/services/auth/auth.read";
 import { ServiceError } from "@/shared/errors";
+import { createDefaultPanels } from "@/lib/panels/defaultPanels";
 
 function slugifyTitle(title: string): string {
   return title
@@ -18,28 +19,31 @@ function slugifyTitle(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-async function buildUniqueSlug(title: string): Promise<string> {
-  const baseSlug = slugifyTitle(title) || "event";
-  let candidate = baseSlug;
-
-  for (let suffix = 1; suffix < 1000; suffix += 1) {
-    const { count, error } = await supabaseClient
-      .from("events")
-      .select("id", { head: true, count: "exact" })
-      .eq("slug", candidate);
-
-    if (error) {
-      throw new ServiceError("SUPABASE_ERROR", error.message, error);
-    }
-
-    if ((count ?? 0) === 0) {
-      return candidate;
-    }
-
-    candidate = `${baseSlug}-${suffix + 1}`;
+function randomSuffix(): string {
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 8);
   }
 
-  throw new ServiceError("SUPABASE_ERROR", "Failed to generate clean slug");
+  return Math.random().toString(16).slice(2, 10).padEnd(8, "0").slice(0, 8);
+}
+
+function buildCleanSlug(title: string): string {
+  const baseSlug = slugifyTitle(title) || "event";
+  return `${baseSlug}-${randomSuffix()}`;
+}
+
+function isSlugDuplicateError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+
+  const code =
+    "code" in error && typeof error.code === "string" ? error.code : "";
+  const message =
+    "message" in error && typeof error.message === "string" ? error.message : "";
+
+  return code === "23505" || message.includes("events_slug_key");
 }
 
 export async function createEvent(input: NewEventInput) {
@@ -63,28 +67,52 @@ export async function createEvent(input: NewEventInput) {
     throw new ServiceError("BAD_REQUEST", "Event date is required");
   }
 
-  const generatedSlug = await buildUniqueSlug(input.title);
   const tier = input.tier ?? 1;
+  const panels = createDefaultPanels();
+  const maxAttempts = 8;
+  let data: { id: string; slug: string } | null = null;
+  let lastError: unknown = null;
 
-  const { data, error } = await supabaseClient
-    .from("events")
-    .insert({
-      title: input.title,
-      slug: generatedSlug,
-      event_date: input.event_date,
-      tier,
-      host_id: hostId,
-      host_email: hostEmail,
-      state: "draft",
-    })
-    .select("id, slug")
-    .single();
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const generatedSlug = buildCleanSlug(input.title);
 
-  if (error || !data) {
+    const { data: inserted, error } = await supabaseClient
+      .from("events")
+      .insert({
+        title: input.title,
+        slug: generatedSlug,
+        event_date: input.event_date,
+        tier,
+        host_id: hostId,
+        host_email: hostEmail,
+        state: "draft",
+        panels,
+      })
+      .select("id, slug")
+      .single();
+
+    if (!error && inserted) {
+      data = inserted;
+      break;
+    }
+
+    lastError = error;
+    if (isSlugDuplicateError(error)) {
+      continue;
+    }
+
     throw new ServiceError(
       "SUPABASE_ERROR",
       error?.message ?? "Failed to create event",
       error
+    );
+  }
+
+  if (!data) {
+    throw new ServiceError(
+      "SUPABASE_ERROR",
+      "Failed to generate unique slug for event",
+      lastError
     );
   }
 
