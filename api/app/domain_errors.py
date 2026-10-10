@@ -46,6 +46,10 @@ class InvalidDate(DomainError):
     code = ErrorCode.INVALID_DATE
 
 
+class InvalidContact(DomainError):
+    code = ErrorCode.INVALID_CONTACT
+
+
 class RateLimited(DomainError):
     code = ErrorCode.RATE_LIMITED
 

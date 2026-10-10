@@ -5,7 +5,7 @@ import pytest
 from app.clock import vilnius_today
 from app.domain_errors import InvalidDate
 from app.error_codes import ErrorCode
-from app.services.vaises_dates import booking_window_end, ensure_bookable
+from app.services.vaises_dates import booking_window_end, ensure_bookable, format_date_lt
 
 TODAY = date(2026, 10, 10)
 
@@ -46,3 +46,16 @@ def test_ensure_bookable_window(value: date, ok: bool) -> None:
 
 def test_window_end_from_feb_29() -> None:
     assert booking_window_end(date(2028, 2, 29)) == date(2031, 2, 28)
+
+
+@pytest.mark.parametrize(
+    ("value", "label"),
+    [
+        (date(2026, 11, 14), "2026 m. lapkričio 14 d."),
+        (date(2027, 1, 1), "2027 m. sausio 1 d."),
+        (date(2027, 8, 31), "2027 m. rugpjūčio 31 d."),
+        (date(2027, 12, 5), "2027 m. gruodžio 5 d."),
+    ],
+)
+def test_format_date_lt(value: date, label: str) -> None:
+    assert format_date_lt(value) == label

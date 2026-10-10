@@ -36,6 +36,12 @@ def test_deployed_environments_refuse_fake_email_backends(backend: EmailBackend)
         make_settings(**_deployed(Environment.PRODUCTION, email_backend=backend))
 
 
+@pytest.mark.parametrize("environment", [Environment.STAGING, Environment.PRODUCTION])
+def test_deployed_environments_require_vaises_notify_email(environment: Environment) -> None:
+    with pytest.raises(ValidationError, match="VAISES_NOTIFY_EMAIL"):
+        make_settings(**_deployed(environment, vaises_notify_email=None))
+
+
 def test_deployed_environments_require_https_app_url() -> None:
     with pytest.raises(ValidationError, match="https"):
         make_settings(

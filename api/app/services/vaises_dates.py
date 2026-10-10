@@ -16,3 +16,24 @@ def booking_window_end(today: date) -> date:
 def ensure_bookable(value: date, today: date) -> None:
     if not today <= value <= booking_window_end(today):
         raise InvalidDate
+
+
+# Genitive month names, as Lithuanian writes them in a full date.
+LT_MONTHS_GENITIVE = (
+    "sausio",
+    "vasario",
+    "kovo",
+    "balandžio",
+    "gegužės",
+    "birželio",
+    "liepos",
+    "rugpjūčio",
+    "rugsėjo",
+    "spalio",
+    "lapkričio",
+    "gruodžio",
+)
+
+
+def format_date_lt(value: date) -> str:
+    return f"{value.year} m. {LT_MONTHS_GENITIVE[value.month - 1]} {value.day} d."

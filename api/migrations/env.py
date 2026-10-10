@@ -11,7 +11,8 @@ from app.settings import get_settings
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep app loggers alive: migrations also run in-process (tests), after app modules import.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

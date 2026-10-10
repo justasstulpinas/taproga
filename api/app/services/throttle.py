@@ -15,6 +15,7 @@ from app.security.tokens import SubjectHasher
 class SubjectKind(StrEnum):
     IP = "ip"
     EMAIL = "email"
+    CONTACT = "contact"
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,11 @@ class Rules:
     ACCOUNT_EXISTS_NOTICE = ThrottleRule("exists_notice", SubjectKind.EMAIL, 2, DAY, HOUR, DAY)
     TOKEN_REDEEM_IP = ThrottleRule("token_redeem_ip", SubjectKind.IP, 20, HOUR, MINUTE, HOUR)
     VAISES_AVAILABILITY_IP = ThrottleRule("vaises_avail_ip", SubjectKind.IP, 60, HOUR, MINUTE, HOUR)
+    VAISES_SUBMIT_IP = ThrottleRule("vaises_submit_ip", SubjectKind.IP, 5, HOUR, 5 * MINUTE, DAY)
+    # Keyed by the normalised contact, so one inbox or phone can't be flooded with receipts.
+    VAISES_SUBMIT_RECIPIENT = ThrottleRule(
+        "vaises_submit_recipient", SubjectKind.CONTACT, 3, DAY, HOUR, DAY
+    )
 
     ACCOUNT_LOCKOUTS = (LOGIN_FAILURE_ACCOUNT,)
 

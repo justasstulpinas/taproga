@@ -29,12 +29,16 @@ _STATUS_BY_DOMAIN_CODE = {
     ErrorCode.PASSWORD_BREACHED: 400,
     ErrorCode.HUMAN_VERIFICATION_FAILED: 400,
     ErrorCode.INVALID_DATE: 422,
+    ErrorCode.INVALID_CONTACT: 422,
     ErrorCode.RATE_LIMITED: 429,
 }
 
 
 # Custom Pydantic error types that surface as a dedicated code rather than VALIDATION_ERROR.
-_CODE_BY_VALIDATION_TYPE = {"invalid_date": ErrorCode.INVALID_DATE}
+_CODE_BY_VALIDATION_TYPE = {
+    "invalid_date": ErrorCode.INVALID_DATE,
+    "invalid_contact": ErrorCode.INVALID_CONTACT,
+}
 
 
 def error_response(

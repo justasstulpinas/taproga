@@ -96,6 +96,7 @@ def get_today() -> date:
 
 def get_vaises_service(
     db: DbSession,
+    settings: AppSettings,
     security: Security,
     integrations: Annotated[Integrations, Depends(get_integrations)],
     today: Annotated[date, Depends(get_today)],
@@ -108,7 +109,8 @@ def get_vaises_service(
         human_verifier=integrations.human_verifier,
         email_queue=EmailQueue(db),
         audit=AuditService(db),
-        notify_email=None,
+        links=security.links,
+        notify_email=settings.vaises_notify_email,
         today=lambda: today,
     )
 

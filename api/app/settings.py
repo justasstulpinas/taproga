@@ -2,7 +2,7 @@ from enum import StrEnum
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import SecretStr, model_validator
+from pydantic import EmailStr, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 POSTGRES_DRIVER_PREFIX = "postgresql+asyncpg://"
@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     breach_check_enabled: bool = True
     email_backend: EmailBackend = EmailBackend.CONSOLE
     email_from: str = "Ta Proga <no-reply@taproga.com>"
+    # Inbox that receives every Vaises date inquiry and consultation request.
+    vaises_notify_email: EmailStr | None = None
 
     @property
     def is_deployed(self) -> bool:
@@ -73,6 +75,8 @@ class Settings(BaseSettings):
             raise ValueError(f"{self.environment} requires TURNSTILE_SECRET_KEY")
         if not self.public_app_url.startswith("https://"):
             raise ValueError(f"{self.environment} requires an https PUBLIC_APP_URL")
+        if self.vaises_notify_email is None:
+            raise ValueError(f"{self.environment} requires VAISES_NOTIFY_EMAIL")
         if self.email_backend not in DELIVERING_EMAIL_BACKENDS:
             raise ValueError(f"{self.environment} requires a delivering EMAIL_BACKEND")
         return self

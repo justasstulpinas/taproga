@@ -43,6 +43,7 @@ def make_settings(**overrides: object) -> Settings:
         "encryption_key": TEST_ENCRYPTION_KEY,
         "public_app_url": APP_URL,
         "breach_check_enabled": False,
+        "vaises_notify_email": "owner@vaises.lt",
     }
     values.update(overrides)
     return Settings.model_validate(values)
