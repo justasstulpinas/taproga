@@ -4,26 +4,16 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.dependencies import Meta, Superadmin, get_admin_service, require_superadmin
-from app.pagination import Cursor, PageRequest
+from app.routers.common import PageParams
 from app.schemas.admin import AdminUserDetailOut, AdminUserOut, AuditEntryOut
 from app.schemas.auth import AcceptedOut
-from app.schemas.common import PAGE_LIMIT_DEFAULT, PageLimit, PageOut
+from app.schemas.common import PageOut
 from app.services.admin import AdminService
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_superadmin)])
 
 Admin = Annotated[AdminService, Depends(get_admin_service)]
 EMAIL_QUERY_MAX_LENGTH = 100
-
-
-def get_page_request(
-    limit: PageLimit = PAGE_LIMIT_DEFAULT,
-    cursor: Annotated[str | None, Query(max_length=200)] = None,
-) -> PageRequest:
-    return PageRequest(limit=limit, after=Cursor.decode(cursor) if cursor else None)
-
-
-PageParams = Annotated[PageRequest, Depends(get_page_request)]
 
 
 @router.get("/users")

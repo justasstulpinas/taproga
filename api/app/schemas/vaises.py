@@ -8,7 +8,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainValidator
 from pydantic_core import PydanticCustomError
 
 from app.models.user import Locale
-from app.models.vaises import Availability, ContactKind
+from app.models.vaises import Availability, ContactKind, RequestKind, RequestStatus
 from app.schemas.auth import TurnstileToken
 
 ISO_DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
@@ -94,3 +94,17 @@ class BlockDateIn(BaseModel):
 class BlockedDateOut(BaseModel):
     date: date
     created_at: datetime
+
+
+class VaisesRequestOut(BaseModel):
+    id: uuid.UUID
+    kind: RequestKind
+    event_date: date | None
+    event_date_label: str | None
+    availability_at_submit: Availability | None
+    contact_kind: ContactKind | None
+    contact: str | None
+    status: RequestStatus
+    created_at: datetime
+    handled_at: datetime | None
+    anonymised_at: datetime | None

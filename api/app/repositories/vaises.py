@@ -1,10 +1,11 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.vaises import BlockedDate, VaisesRequest
+from app.models.vaises import BlockedDate, RequestStatus, VaisesRequest
+from app.pagination import Cursor, Page, PageRequest
 
 
 class VaisesRepository:
@@ -44,3 +45,29 @@ class VaisesRepository:
 
     async def delete_blocked(self, blocked: BlockedDate) -> None:
         await self._session.delete(blocked)
+
+    async def get_request(self, public_id: uuid.UUID) -> VaisesRequest | None:
+        result = await self._session.execute(
+            select(VaisesRequest).where(
+                VaisesRequest.public_id == public_id, VaisesRequest.deleted_at.is_(None)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_requests(self, status: RequestStatus, page: PageRequest) -> Page[VaisesRequest]:
+        stmt = (
+            select(VaisesRequest)
+            .where(VaisesRequest.status == status, VaisesRequest.deleted_at.is_(None))
+            .order_by(VaisesRequest.created_at.desc(), VaisesRequest.public_id.desc())
+        )
+        if page.after is not None:
+            stmt = stmt.where(
+                tuple_(VaisesRequest.created_at, VaisesRequest.public_id)
+                < tuple_(page.after.created_at, page.after.public_id)
+            )
+        result = await self._session.execute(stmt.limit(page.limit + 1))
+        rows = list(result.scalars())
+        has_more = len(rows) > page.limit
+        items = rows[: page.limit]
+        next_cursor = Cursor(items[-1].created_at, items[-1].public_id) if has_more else None
+        return Page(items=items, next_cursor=next_cursor)

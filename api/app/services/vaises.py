@@ -1,12 +1,14 @@
 import logging
 import uuid
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain_errors import HumanVerificationFailed, InvalidDate
+from app.clock import utcnow
+from app.domain_errors import HumanVerificationFailed, InvalidDate, NotFound
 from app.emails.templates import EmailTemplate
 from app.integrations.human_verification import HumanVerifier
 from app.models.audit import ActorKind
@@ -16,8 +18,10 @@ from app.models.vaises import (
     BlockedDate,
     ContactKind,
     RequestKind,
+    RequestStatus,
     VaisesRequest,
 )
+from app.pagination import Page, PageRequest
 from app.repositories.vaises import VaisesRepository
 from app.schemas.vaises import ConsultationIn, Contact, DateInquiryIn
 from app.security.encryption import FieldEncryptor
@@ -43,6 +47,15 @@ AVAILABILITY_LABELS_LT = {
     Availability.AVAILABLE: "laisva",
     Availability.RESERVED: "rezervuota",
 }
+
+# The one definition of what anonymising clears; the bulk retention UPDATE sets these same columns.
+ANONYMISED_COLUMNS = ("contact_kind", "contact_encrypted", "contact_hash")
+
+
+def anonymise(request: VaisesRequest, now: datetime) -> None:
+    for column in ANONYMISED_COLUMNS:
+        setattr(request, column, None)
+    request.anonymised_at = now
 
 
 class VaisesService:
@@ -131,6 +144,105 @@ class VaisesService:
         )
         await self._repository.delete_blocked(blocked)
         await self._session.commit()
+
+    async def list_requests(self, status: RequestStatus, page: PageRequest) -> Page[VaisesRequest]:
+        return await self._repository.list_requests(status, page)
+
+    async def get_request(self, public_id: uuid.UUID) -> VaisesRequest:
+        return await self._get_request(public_id)
+
+    def reveal_contact(self, request: VaisesRequest) -> str | None:
+        if request.contact_encrypted is None:
+            return None
+        return self._encryptor.decrypt(request.contact_encrypted)
+
+    async def mark_handled(
+        self, ctx: AuthContext, public_id: uuid.UUID, meta: RequestMeta
+    ) -> VaisesRequest:
+        request = await self._get_request(public_id)
+        if request.status is RequestStatus.HANDLED:
+            return request
+        # Read before the commit: expiry on commit would otherwise reload the context's user.
+        admin_id = ctx.user.id
+        request.status = RequestStatus.HANDLED
+        request.handled_at = utcnow()
+        request.handled_by_user_id = admin_id
+        self._audit_request(
+            AuditAction.VAISES_REQUEST_HANDLED,
+            admin_id,
+            request,
+            meta,
+            before={"status": RequestStatus.NEW.value},
+            after={"status": RequestStatus.HANDLED.value},
+        )
+        await self._session.commit()
+        return request
+
+    async def reopen(
+        self, ctx: AuthContext, public_id: uuid.UUID, meta: RequestMeta
+    ) -> VaisesRequest:
+        request = await self._get_request(public_id)
+        if request.status is RequestStatus.NEW:
+            return request
+        admin_id = ctx.user.id
+        request.status = RequestStatus.NEW
+        request.handled_at = None
+        request.handled_by_user_id = None
+        self._audit_request(
+            AuditAction.VAISES_REQUEST_REOPENED,
+            admin_id,
+            request,
+            meta,
+            before={"status": RequestStatus.HANDLED.value},
+            after={"status": RequestStatus.NEW.value},
+        )
+        await self._session.commit()
+        return request
+
+    async def erase(
+        self, ctx: AuthContext, public_id: uuid.UUID, meta: RequestMeta
+    ) -> VaisesRequest:
+        request = await self._get_request(public_id)
+        if request.anonymised_at is not None:
+            return request
+        admin_id = ctx.user.id
+        anonymise(request, utcnow())
+        self._audit_request(
+            AuditAction.VAISES_REQUEST_ERASED,
+            admin_id,
+            request,
+            meta,
+            before={"anonymised": False},
+            after={"anonymised": True},
+        )
+        await self._session.commit()
+        return request
+
+    async def _get_request(self, public_id: uuid.UUID) -> VaisesRequest:
+        request = await self._repository.get_request(public_id)
+        if request is None:
+            raise NotFound
+        return request
+
+    def _audit_request(
+        self,
+        action: AuditAction,
+        admin_id: int,
+        request: VaisesRequest,
+        meta: RequestMeta,
+        *,
+        before: dict[str, Any],
+        after: dict[str, Any],
+    ) -> None:
+        self._audit.record(
+            actor=Actor(kind=ActorKind.SUPERADMIN, user_id=admin_id),
+            action=action,
+            meta=meta,
+            target_type=AuditTarget.VAISES_REQUEST,
+            target_public_id=request.public_id,
+            before=before,
+            after=after,
+        )
 
     async def _availability_on(self, value: date) -> Availability:
         if await self._repository.is_blocked(value):

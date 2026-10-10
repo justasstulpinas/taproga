@@ -30,11 +30,15 @@ class AuditAction(StrEnum):
     ADMIN_UNLOCKED_ACCOUNT = "admin.unlocked_account"
     VAISES_DATE_BLOCKED = "vaises.date_blocked"
     VAISES_DATE_UNBLOCKED = "vaises.date_unblocked"
+    VAISES_REQUEST_HANDLED = "vaises.request_handled"
+    VAISES_REQUEST_REOPENED = "vaises.request_reopened"
+    VAISES_REQUEST_ERASED = "vaises.request_erased"
 
 
 class AuditTarget(StrEnum):
     USER = "user"
     VAISES_BLOCKED_DATE = "vaises_blocked_date"
+    VAISES_REQUEST = "vaises_request"
 
 
 @dataclass(frozen=True)
