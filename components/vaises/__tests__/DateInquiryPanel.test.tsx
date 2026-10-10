@@ -16,18 +16,21 @@ function jsonResponse(status: number, body: unknown): Response {
 let postBodies: Array<Record<string, unknown>>;
 let submitResponses: Response[];
 let submitGate: Promise<void>;
+let postGates: Array<Promise<void>>;
 
 beforeEach(() => {
   postBodies = [];
   submitResponses = [];
   submitGate = Promise.resolve();
+  postGates = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (_url: string, init?: RequestInit) => {
       if (init?.method === "POST") {
         postBodies.push(JSON.parse(String(init.body)));
-        await submitGate;
-        return submitResponses.shift() ?? jsonResponse(202, { status: "accepted" });
+        const response = submitResponses.shift() ?? jsonResponse(202, { status: "accepted" });
+        await (postGates.shift() ?? submitGate);
+        return response;
       }
       return jsonResponse(200, { date: "2030-01-01", availability: "available" });
     }),
@@ -110,11 +113,48 @@ test("a stale failure after changing the date neither shows an error nor wastes 
   release();
   await waitFor(() => expect(postBodies).toHaveLength(1));
   await new Promise((resolve) => setTimeout(resolve, 50));
-  expect(screen.queryByRole("alert")).toBeNull();
 
   await user.click(screen.getByRole("button", { name: "Tikrinti" }));
   await screen.findByRole("textbox", {}, { timeout: 3000 });
+  // Unfixed code leaves the stale send="error" behind, which would surface right here.
+  expect(screen.queryByRole("alert")).toBeNull();
   await user.click(screen.getByRole("button", { name: "Siųsti užklausą" }));
+  await screen.findByRole("alert");
+  await user.click(screen.getByRole("button", { name: "Siųsti užklausą" }));
+  await waitFor(() => expect(postBodies).toHaveLength(3));
+
+  expect(postBodies[1].idempotency_key).not.toBe(postBodies[0].idempotency_key);
+  expect(postBodies[2].idempotency_key).toBe(postBodies[1].idempotency_key);
+});
+
+test("a late success from an abandoned send does not clear the newer inquiry's key", async () => {
+  submitResponses.push(
+    jsonResponse(202, { status: "accepted" }),
+    jsonResponse(500, { error: { code: "INTERNAL_ERROR" } }),
+  );
+  let releaseOld!: () => void;
+  let releaseNew!: () => void;
+  postGates.push(
+    new Promise<void>((resolve) => {
+      releaseOld = resolve;
+    }),
+    new Promise<void>((resolve) => {
+      releaseNew = resolve;
+    }),
+  );
+  const user = userEvent.setup();
+  const input = await openResultStep(user);
+  await user.type(input, CONTACT);
+  await user.click(screen.getByRole("button", { name: "Siųsti užklausą" }));
+  await user.click(screen.getByRole("button", { name: "Keisti datą" }));
+  await user.click(screen.getByRole("button", { name: "Tikrinti" }));
+  await screen.findByRole("textbox", {}, { timeout: 3000 });
+  await user.click(screen.getByRole("button", { name: "Siųsti užklausą" }));
+  await waitFor(() => expect(postBodies).toHaveLength(2));
+
+  releaseOld();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  releaseNew();
   await screen.findByRole("alert");
   await user.click(screen.getByRole("button", { name: "Siųsti užklausą" }));
   await waitFor(() => expect(postBodies).toHaveLength(3));
