@@ -40,6 +40,10 @@ class BlockedDate(PublicIdMixin, TimestampMixin, Base):
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
 
 
+# Contact fields erased by anonymisation; shared by the single-row and bulk retention paths.
+ANONYMISED_COLUMNS = ("contact_kind", "contact_encrypted", "contact_hash")
+
+
 class VaisesRequest(PublicIdMixin, TimestampMixin, Base):
     """A date inquiry or consultation request; contact fields are nulled once anonymised."""
 

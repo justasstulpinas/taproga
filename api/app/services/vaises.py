@@ -14,6 +14,7 @@ from app.integrations.human_verification import HumanVerifier
 from app.models.audit import ActorKind
 from app.models.user import Locale
 from app.models.vaises import (
+    ANONYMISED_COLUMNS,
     Availability,
     BlockedDate,
     ContactKind,
@@ -47,9 +48,6 @@ AVAILABILITY_LABELS_LT = {
     Availability.AVAILABLE: "laisva",
     Availability.RESERVED: "rezervuota",
 }
-
-# The one definition of what anonymising clears; the bulk retention UPDATE sets these same columns.
-ANONYMISED_COLUMNS = ("contact_kind", "contact_encrypted", "contact_hash")
 
 
 def anonymise(request: VaisesRequest, now: datetime) -> None:

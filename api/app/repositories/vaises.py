@@ -1,10 +1,10 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.vaises import BlockedDate, RequestStatus, VaisesRequest
+from app.models.vaises import ANONYMISED_COLUMNS, BlockedDate, RequestStatus, VaisesRequest
 from app.pagination import Cursor, Page, PageRequest
 
 
@@ -71,3 +71,19 @@ class VaisesRepository:
         items = rows[: page.limit]
         next_cursor = Cursor(items[-1].created_at, items[-1].public_id) if has_more else None
         return Page(items=items, next_cursor=next_cursor)
+
+    async def anonymise_handled_before(self, cutoff: datetime, now: datetime) -> int:
+        values: dict[str, datetime | None] = {column: None for column in ANONYMISED_COLUMNS}
+        values["anonymised_at"] = now
+        result = await self._session.execute(
+            update(VaisesRequest)
+            .where(
+                VaisesRequest.status == RequestStatus.HANDLED,
+                VaisesRequest.handled_at < cutoff,
+                VaisesRequest.anonymised_at.is_(None),
+                VaisesRequest.deleted_at.is_(None),
+            )
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        return int(result.rowcount)  # type: ignore[attr-defined]

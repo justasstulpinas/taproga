@@ -33,6 +33,7 @@ class AuditAction(StrEnum):
     VAISES_REQUEST_HANDLED = "vaises.request_handled"
     VAISES_REQUEST_REOPENED = "vaises.request_reopened"
     VAISES_REQUEST_ERASED = "vaises.request_erased"
+    VAISES_RETENTION_RUN = "vaises.retention_run"
 
 
 class AuditTarget(StrEnum):

@@ -40,6 +40,8 @@ uv run python -m app.cli create-superadmin --email you@taproga.com
   real client IP rather than the proxy's.
 - Run at least one `app.jobs.email_worker` process alongside the API; several are safe (rows are
   claimed with `SELECT … FOR UPDATE SKIP LOCKED`). Dead-lettered emails log at `ERROR`.
+- Run `uv run python -m app.jobs.vaises_retention` once a day (cron or the host's scheduler). It
+  runs once and exits, anonymising contact details of requests handled more than 730 days ago.
 
 ## Environment variables
 
