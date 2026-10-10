@@ -60,7 +60,10 @@ async def test_worker_retries_with_backoff_then_dead_letters(
     assert stored.last_error == "ConnectionError: provider down"
 
 
-@pytest.mark.parametrize("template", list(EmailTemplate))
+# Vaises templates are covered in test_vaises_emails.py (the receipts carry no links by design).
+@pytest.mark.parametrize(
+    "template", [t for t in EmailTemplate if not t.value.startswith("vaises_")]
+)
 @pytest.mark.parametrize("locale", list(Locale))
 def test_every_template_renders_html_and_text(template: EmailTemplate, locale: Locale) -> None:
     payload = {
