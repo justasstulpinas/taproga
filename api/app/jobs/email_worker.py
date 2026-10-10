@@ -22,6 +22,11 @@ MAX_ATTEMPTS = 8
 BASE_RETRY_DELAY = timedelta(seconds=30)
 POLL_INTERVAL_SECONDS = 2.0
 ERROR_MAX_LENGTH = 500
+# Visitor receipts go to a contact that is otherwise only stored encrypted; once delivery
+# is settled the plaintext address must not linger in the outbox.
+REDACT_RECIPIENT_AFTER_DELIVERY = frozenset(
+    {EmailTemplate.VAISES_RECEIPT_DATE, EmailTemplate.VAISES_RECEIPT_CONSULTATION}
+)
 
 
 def retry_delay(attempts: int) -> timedelta:
@@ -33,6 +38,13 @@ async def _deliver_one(email: OutboxEmail, sender: EmailSender, sender_address: 
         EmailTemplate(email.template), email.locale, email.to_address, email.payload or {}
     )
     await sender.send(message, sender_address)
+
+
+def _scrub_after_delivery(email: OutboxEmail) -> None:
+    # One-time links must not outlive delivery in the database.
+    email.payload = None
+    if email.template in REDACT_RECIPIENT_AFTER_DELIVERY:
+        email.to_address = ""
 
 
 async def deliver_due_emails(
@@ -50,7 +62,7 @@ async def deliver_due_emails(
                 email.last_error = f"{type(exc).__name__}: {exc}"[:ERROR_MAX_LENGTH]
                 if email.attempts >= MAX_ATTEMPTS:
                     email.status = OutboxStatus.DEAD
-                    email.payload = None
+                    _scrub_after_delivery(email)
                     logger.error(
                         "email_dead_lettered",
                         extra={"outbox_id": email.id, "template": email.template},
@@ -64,8 +76,7 @@ async def deliver_due_emails(
                 continue
             email.status = OutboxStatus.SENT
             email.sent_at = now
-            # One-time links must not outlive delivery in the database.
-            email.payload = None
+            _scrub_after_delivery(email)
             logger.info("email_sent", extra={"outbox_id": email.id, "template": email.template})
         await session.commit()
         return len(batch)

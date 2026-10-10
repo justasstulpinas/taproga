@@ -90,3 +90,102 @@ def test_template_escapes_link_values() -> None:
     )
 
     assert "<script>" not in message.html
+
+
+VISITOR = "jonas@pavyzdys.lt"
+OWNER = "owner@vaises.lt"
+OWNER_PAYLOAD = {
+    "kind_label": "Datos užklausa",
+    "date_label": "2026 m. lapkričio 14 d.",
+    "availability_label": "laisva",
+    "contact": VISITOR,
+    "admin_url": "http://localhost:3000/admin/vaises/uzklausos?id=abc",
+}
+
+
+async def queue(
+    sessionmaker: SessionMaker, template: EmailTemplate, to: str, payload: dict[str, str]
+) -> int:
+    async with sessionmaker() as session:
+        email = OutboxEmail(to_address=to, template=template, locale=Locale.LT, payload=payload)
+        session.add(email)
+        await session.commit()
+        return email.id
+
+
+async def stored(sessionmaker: SessionMaker, email_id: int) -> OutboxEmail:
+    async with sessionmaker() as session:
+        email = await session.get(OutboxEmail, email_id)
+        assert email is not None
+        return email
+
+
+@pytest.mark.parametrize(
+    ("template", "payload"),
+    [
+        (EmailTemplate.VAISES_RECEIPT_DATE, {"date_label": "2026 m. lapkričio 14 d."}),
+        (EmailTemplate.VAISES_RECEIPT_CONSULTATION, {}),
+    ],
+)
+async def test_vaises_receipt_recipient_is_redacted_after_send(
+    sessionmaker: SessionMaker, template: EmailTemplate, payload: dict[str, str]
+) -> None:
+    email_id = await queue(sessionmaker, template, VISITOR, payload)
+    sender = MemoryEmailSender()
+
+    await deliver_due_emails(sessionmaker, sender, SENDER)
+
+    assert [m.to for m in sender.sent] == [VISITOR]
+    email = await stored(sessionmaker, email_id)
+    assert email.status is OutboxStatus.SENT
+    assert email.to_address == ""
+    assert email.payload is None
+
+
+async def test_vaises_receipt_recipient_is_redacted_when_dead_lettered(
+    sessionmaker: SessionMaker,
+) -> None:
+    email_id = await queue(sessionmaker, EmailTemplate.VAISES_RECEIPT_CONSULTATION, VISITOR, {})
+
+    for _ in range(MAX_ATTEMPTS):
+        await deliver_due_emails(sessionmaker, FailingSender(), SENDER)
+        async with sessionmaker() as session:  # make the retry due immediately
+            await session.execute(
+                update(OutboxEmail).values(next_attempt_at=utcnow() - timedelta(seconds=1))
+            )
+            await session.commit()
+
+    email = await stored(sessionmaker, email_id)
+    assert email.status is OutboxStatus.DEAD
+    assert email.to_address == ""
+    assert email.payload is None
+
+
+async def test_auth_email_keeps_its_recipient_after_send(sessionmaker: SessionMaker) -> None:
+    email_id = await queue(
+        sessionmaker,
+        EmailTemplate.VERIFY_EMAIL,
+        "ona@example.lt",
+        {"verify_url": "https://taproga.com/verify-email#token=abc"},
+    )
+
+    await deliver_due_emails(sessionmaker, MemoryEmailSender(), SENDER)
+
+    email = await stored(sessionmaker, email_id)
+    assert email.status is OutboxStatus.SENT
+    assert email.to_address == "ona@example.lt"
+
+
+async def test_owner_notification_keeps_recipient_and_drops_contact(
+    sessionmaker: SessionMaker,
+) -> None:
+    email_id = await queue(
+        sessionmaker, EmailTemplate.VAISES_OWNER_NOTIFICATION, OWNER, OWNER_PAYLOAD
+    )
+
+    await deliver_due_emails(sessionmaker, MemoryEmailSender(), SENDER)
+
+    email = await stored(sessionmaker, email_id)
+    assert email.status is OutboxStatus.SENT
+    assert email.to_address == OWNER
+    assert email.payload is None
