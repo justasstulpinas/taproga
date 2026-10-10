@@ -33,6 +33,10 @@ _STATUS_BY_DOMAIN_CODE = {
 }
 
 
+# Custom Pydantic error types that surface as a dedicated code rather than VALIDATION_ERROR.
+_CODE_BY_VALIDATION_TYPE = {"invalid_date": ErrorCode.INVALID_DATE}
+
+
 def error_response(
     status_code: int,
     code: ErrorCode,
@@ -65,7 +69,12 @@ async def _validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     # Only location and error type: echoing the input back could leak passwords into logs/clients.
-    fields = [{"loc": list(err["loc"]), "type": err["type"]} for err in exc.errors()]
+    errors = exc.errors()
+    dedicated = [_CODE_BY_VALIDATION_TYPE.get(err["type"]) for err in errors]
+    first = dedicated[0] if dedicated else None
+    if first is not None and all(dedicated):
+        return error_response(_STATUS_BY_DOMAIN_CODE[first], first, _request_id(request))
+    fields = [{"loc": list(err["loc"]), "type": err["type"]} for err in errors]
     return error_response(
         422, ErrorCode.VALIDATION_ERROR, _request_id(request), extra={"fields": fields}
     )

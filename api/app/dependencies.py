@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from datetime import date
 from typing import Annotated
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clock import vilnius_today
 from app.db import get_session
 from app.domain_errors import NotAuthenticated
 from app.integrations import Integrations
@@ -11,10 +13,13 @@ from app.policies.access import ensure_fully_authenticated, ensure_superadmin
 from app.security.encryption import FieldEncryptor
 from app.security.tokens import SubjectHasher
 from app.services.admin import AdminService
+from app.services.audit import AuditService
 from app.services.auth import AuthService
 from app.services.context import AuthContext, RequestMeta
-from app.services.email_queue import LinkBuilder
+from app.services.email_queue import EmailQueue, LinkBuilder
 from app.services.sessions import SessionService
+from app.services.throttle import Throttle
+from app.services.vaises import VaisesService
 from app.settings import Settings
 
 
@@ -83,6 +88,32 @@ def get_auth_service(
 
 def get_admin_service(db: DbSession, security: Security) -> AdminService:
     return AdminService(db, hasher=security.hasher, links=security.links)
+
+
+def get_today() -> date:
+    return vilnius_today()
+
+
+def get_vaises_service(
+    db: DbSession,
+    security: Security,
+    integrations: Annotated[Integrations, Depends(get_integrations)],
+    today: Annotated[date, Depends(get_today)],
+) -> VaisesService:
+    return VaisesService(
+        db,
+        throttle=Throttle(db, security.hasher),
+        encryptor=security.encryptor,
+        hasher=security.hasher,
+        human_verifier=integrations.human_verifier,
+        email_queue=EmailQueue(db),
+        audit=AuditService(db),
+        notify_email=None,
+        today=lambda: today,
+    )
+
+
+Vaises = Annotated[VaisesService, Depends(get_vaises_service)]
 
 
 async def get_session_context(

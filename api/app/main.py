@@ -15,7 +15,7 @@ from app.middleware.error_boundary import ErrorBoundaryMiddleware
 from app.middleware.origin_check import OriginCheckMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.routers import admin, auth, health
+from app.routers import admin, auth, health, vaises_public
 from app.settings import Settings, get_settings
 
 API_PREFIX = "/api/v1"
@@ -69,5 +69,6 @@ def create_app(
     app.include_router(health.router)
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(admin.router, prefix=API_PREFIX)
+    app.include_router(vaises_public.router, prefix=API_PREFIX)
 
     return app
