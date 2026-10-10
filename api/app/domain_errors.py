@@ -42,6 +42,10 @@ class HumanVerificationFailed(DomainError):
     code = ErrorCode.HUMAN_VERIFICATION_FAILED
 
 
+class InvalidDate(DomainError):
+    code = ErrorCode.INVALID_DATE
+
+
 class RateLimited(DomainError):
     code = ErrorCode.RATE_LIMITED
 
