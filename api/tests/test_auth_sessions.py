@@ -31,7 +31,7 @@ async def test_login_succeeds_after_verification_and_sets_hardened_cookie(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["mfa_required"] is False
+    assert "mfa_required" not in body
     assert body["user"]["email"] == "ona@example.lt"
     assert body["user"]["account_type"] == "newlywed"
     assert "id" in body["user"]

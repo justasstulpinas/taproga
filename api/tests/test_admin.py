@@ -1,4 +1,3 @@
-import pyotp
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -8,7 +7,7 @@ from app.models.audit import ActorKind
 from tests.conftest import (
     STRONG_PASSWORD,
     SessionMaker,
-    SuperadminCredentials,
+    admin_login,
     create_superadmin,
     get_user,
     login,
@@ -17,7 +16,6 @@ from tests.conftest import (
     register_body,
 )
 
-MFA = "/api/v1/auth/mfa"
 USERS = "/api/v1/admin/users"
 
 ADMIN_ENDPOINTS = [
@@ -28,13 +26,6 @@ ADMIN_ENDPOINTS = [
     ("POST", f"{USERS}/00000000-0000-4000-8000-000000000000/unlock"),
     ("GET", "/api/v1/admin/audit-log"),
 ]
-
-
-async def _admin_session(client: AsyncClient, creds: SuperadminCredentials) -> None:
-    body = await login(client, creds.email, creds.password)
-    assert body["mfa_required"] is True
-    response = await client.post(MFA, json={"code": pyotp.TOTP(creds.totp_secret).now()})
-    assert response.status_code == 200, response.text
 
 
 async def _user_id(client: AsyncClient, email: str) -> str:
@@ -70,59 +61,12 @@ async def test_admin_endpoints_reject_regular_users(
     assert response.json()["error"]["code"] == "FORBIDDEN"
 
 
-async def test_superadmin_needs_mfa_before_admin_access(
-    client: AsyncClient, sessionmaker: SessionMaker
-) -> None:
-    creds = await create_superadmin(sessionmaker)
-    await login(client, creds.email, creds.password)
-
-    before_mfa = await client.get(USERS)
-    me = await client.get("/api/v1/auth/me")
-    await client.post(MFA, json={"code": pyotp.TOTP(creds.totp_secret).now()})
-    after_mfa = await client.get(USERS)
-
-    assert before_mfa.status_code == 403
-    assert before_mfa.json()["error"]["code"] == "MFA_REQUIRED"
-    assert me.json()["mfa_pending"] is True
-    assert after_mfa.status_code == 200
-
-
-async def test_mfa_rejects_wrong_and_replayed_codes(
-    client: AsyncClient, sessionmaker: SessionMaker
-) -> None:
-    creds = await create_superadmin(sessionmaker)
-    await login(client, creds.email, creds.password)
-    code = pyotp.TOTP(creds.totp_secret).now()
-
-    wrong = await client.post(MFA, json={"code": "000000" if code != "000000" else "111111"})
-    accepted = await client.post(MFA, json={"code": code})
-    client.cookies.clear()
-    await login(client, creds.email, creds.password)
-    replayed = await client.post(MFA, json={"code": code})
-
-    assert wrong.status_code == 400
-    assert wrong.json()["error"]["code"] == "MFA_INVALID"
-    assert accepted.status_code == 200
-    assert replayed.status_code == 400
-
-
-async def test_mfa_is_not_available_to_regular_users(
-    client: AsyncClient, sessionmaker: SessionMaker
-) -> None:
-    await register_and_verify(client, sessionmaker, "ona@example.lt")
-    await login(client, "ona@example.lt")
-
-    response = await client.post(MFA, json={"code": "123456"})
-
-    assert response.status_code == 409
-
-
 async def test_force_verify_is_audited_as_the_superadmin(
     client: AsyncClient, sessionmaker: SessionMaker
 ) -> None:
     await client.post("/api/v1/auth/register", json=register_body("ona@example.lt"))
     creds = await create_superadmin(sessionmaker)
-    await _admin_session(client, creds)
+    await admin_login(client, creds)
     user_id = await _user_id(client, "ona@example.lt")
 
     response = await client.post(f"{USERS}/{user_id}/verify-email")
@@ -153,7 +97,7 @@ async def test_unlock_clears_a_locked_account(
             "/api/v1/auth/login", json={"email": "ona@example.lt", "password": "not-the-password"}
         )
     creds = await create_superadmin(sessionmaker)
-    await _admin_session(client, creds)
+    await admin_login(client, creds)
     user_id = await _user_id(client, "ona@example.lt")
 
     unlock = await client.post(f"{USERS}/{user_id}/unlock")
@@ -171,7 +115,7 @@ async def test_trigger_password_reset_emails_the_user(
 ) -> None:
     await register_and_verify(client, sessionmaker, "ona@example.lt")
     creds = await create_superadmin(sessionmaker)
-    await _admin_session(client, creds)
+    await admin_login(client, creds)
     user_id = await _user_id(client, "ona@example.lt")
 
     response = await client.post(f"{USERS}/{user_id}/password-reset")
@@ -187,7 +131,7 @@ async def test_user_list_is_paginated_and_bounded(
     for index in range(3):
         await register_and_verify(client, sessionmaker, f"user{index}@example.lt")
     creds = await create_superadmin(sessionmaker)
-    await _admin_session(client, creds)
+    await admin_login(client, creds)
 
     first = await client.get(USERS, params={"limit": 2})
     second = await client.get(USERS, params={"limit": 2, "cursor": first.json()["next_cursor"]})
@@ -209,7 +153,7 @@ async def test_user_search_treats_wildcards_literally(
 ) -> None:
     await register_and_verify(client, sessionmaker, "ona@example.lt")
     creds = await create_superadmin(sessionmaker)
-    await _admin_session(client, creds)
+    await admin_login(client, creds)
 
     response = await client.get(USERS, params={"q": "%"})
 
@@ -221,11 +165,11 @@ async def test_audit_log_is_readable_by_superadmin(
 ) -> None:
     await register_and_verify(client, sessionmaker, "ona@example.lt")
     creds = await create_superadmin(sessionmaker)
-    await _admin_session(client, creds)
+    await admin_login(client, creds)
 
     response = await client.get("/api/v1/admin/audit-log")
 
     actions = [item["action"] for item in response.json()["items"]]
     assert response.status_code == 200
     assert "user.registered" in actions
-    assert "auth.mfa_succeeded" in actions
+    assert "auth.login_succeeded" in actions

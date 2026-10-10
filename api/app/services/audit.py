@@ -20,8 +20,6 @@ class AuditAction(StrEnum):
     LOGIN_SUCCEEDED = "auth.login_succeeded"
     LOGIN_FAILED = "auth.login_failed"
     LOGIN_BLOCKED_UNVERIFIED = "auth.login_blocked_unverified"
-    MFA_SUCCEEDED = "auth.mfa_succeeded"
-    MFA_FAILED = "auth.mfa_failed"
     LOGOUT = "auth.logout"
     PASSWORD_RESET_REQUESTED = "auth.password_reset_requested"
     PASSWORD_RESET_COMPLETED = "auth.password_reset_completed"

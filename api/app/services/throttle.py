@@ -59,9 +59,8 @@ class Rules:
     # Stops repeated sign-ups against an existing email from spamming its owner.
     ACCOUNT_EXISTS_NOTICE = ThrottleRule("exists_notice", SubjectKind.EMAIL, 2, DAY, HOUR, DAY)
     TOKEN_REDEEM_IP = ThrottleRule("token_redeem_ip", SubjectKind.IP, 20, HOUR, MINUTE, HOUR)
-    MFA_FAILURE_ACCOUNT = ThrottleRule("mfa_fail_acct", SubjectKind.EMAIL, 5, DAY, 5 * MINUTE, DAY)
 
-    ACCOUNT_LOCKOUTS = (LOGIN_FAILURE_ACCOUNT, MFA_FAILURE_ACCOUNT)
+    ACCOUNT_LOCKOUTS = (LOGIN_FAILURE_ACCOUNT,)
 
 
 class Throttle:

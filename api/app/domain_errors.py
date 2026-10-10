@@ -42,18 +42,6 @@ class HumanVerificationFailed(DomainError):
     code = ErrorCode.HUMAN_VERIFICATION_FAILED
 
 
-class MfaRequired(DomainError):
-    code = ErrorCode.MFA_REQUIRED
-
-
-class MfaInvalid(DomainError):
-    code = ErrorCode.MFA_INVALID
-
-
-class MfaNotPending(DomainError):
-    code = ErrorCode.MFA_NOT_PENDING
-
-
 class RateLimited(DomainError):
     code = ErrorCode.RATE_LIMITED
 

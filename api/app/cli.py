@@ -13,12 +13,10 @@ from cryptography.fernet import Fernet
 
 from app.clock import utcnow
 from app.db import build_engine, build_sessionmaker
-from app.dependencies import SecurityKit
 from app.models.audit import ActorKind
 from app.models.user import AccountType, Locale, User
 from app.repositories.users import UserRepository
 from app.security.passwords import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, hash_password
-from app.security.totp import generate_totp_secret, provisioning_uri
 from app.services.audit import Actor, AuditAction, AuditService, AuditTarget
 from app.settings import get_settings
 
@@ -34,7 +32,6 @@ def _prompt_password() -> str:
 
 async def create_superadmin(email: str) -> None:
     settings = get_settings()
-    security = SecurityKit.from_settings(settings)
     engine = build_engine(settings)
     try:
         async with build_sessionmaker(engine)() as session:
@@ -42,14 +39,12 @@ async def create_superadmin(email: str) -> None:
             if await users.get_by_email(email) is not None:
                 sys.exit("An account with this email already exists.")
             password = _prompt_password()
-            secret = generate_totp_secret()
             user = User(
                 email=email,
                 password_hash=hash_password(password),
                 account_type=AccountType.SUPERADMIN,
                 locale=Locale.LT,
                 email_verified_at=utcnow(),
-                totp_secret_encrypted=security.encryptor.encrypt(secret),
             )
             users.add(user)
             await session.flush()
@@ -64,8 +59,7 @@ async def create_superadmin(email: str) -> None:
     finally:
         await engine.dispose()
 
-    print("Superadmin created. Add this to your authenticator app, then clear your terminal:")
-    print(provisioning_uri(secret, email))
+    print("Superadmin created.")
 
 
 def main() -> None:

@@ -40,7 +40,6 @@ class LoginIn(BaseModel):
 
 
 class LoginOut(BaseModel):
-    mfa_required: bool
     user: MeOut
 
 
@@ -65,10 +64,6 @@ class ResetPasswordIn(BaseModel):
 class ChangePasswordIn(BaseModel):
     current_password: ExistingPassword
     new_password: NewPassword
-
-
-class MfaIn(BaseModel):
-    code: Annotated[str, StringConstraints(pattern=r"^\d{6}$")]
 
 
 class AcceptedOut(BaseModel):

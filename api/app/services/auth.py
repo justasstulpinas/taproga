@@ -8,8 +8,6 @@ from app.domain_errors import (
     EmailNotVerified,
     HumanVerificationFailed,
     InvalidCredentials,
-    MfaInvalid,
-    MfaNotPending,
     PasswordBreached,
     RateLimited,
 )
@@ -19,10 +17,8 @@ from app.models.audit import ActorKind
 from app.models.auth import TokenPurpose
 from app.models.user import AccountType, Locale, NewlywedProfile, ServiceProfile, User
 from app.repositories.users import UserRepository
-from app.security.encryption import FieldEncryptor
 from app.security.passwords import hash_password, needs_rehash, verify_password
 from app.security.tokens import SubjectHasher
-from app.security.totp import matching_totp_step
 from app.services.audit import Actor, AuditAction, AuditService, AuditTarget
 from app.services.context import AuthContext, RequestMeta
 from app.services.email_queue import FORGOT_PASSWORD_PATH, LOGIN_PATH, EmailQueue, LinkBuilder
@@ -40,7 +36,6 @@ ANONYMOUS = Actor(ActorKind.ANONYMOUS)
 class LoginResult:
     issued: IssuedSession
     user: User
-    mfa_required: bool
 
 
 def _as_actor(user: User) -> Actor:
@@ -54,13 +49,11 @@ class AuthService:
         db: AsyncSession,
         *,
         integrations: Integrations,
-        encryptor: FieldEncryptor,
         hasher: SubjectHasher,
         links: LinkBuilder,
     ) -> None:
         self._db = db
         self._integrations = integrations
-        self._encryptor = encryptor
         self._links = links
         self._users = UserRepository(db)
         self._sessions = SessionService(db)
@@ -171,7 +164,7 @@ class AuthService:
             await self._email_tokens.issue_and_send(user, TokenPurpose.VERIFY_EMAIL)
             await self._db.commit()
 
-    # --- login, MFA, logout ----------------------------------------------------------------
+    # --- login, logout ----------------------------------------------------------------
 
     async def login(self, email: str, password: str, meta: RequestMeta) -> LoginResult:
         await self._throttle.hit(Rules.LOGIN_IP, meta.ip or UNKNOWN_IP)
@@ -206,54 +199,16 @@ class AuthService:
             await self._db.commit()
             raise EmailNotVerified
 
-        mfa_required = user.account_type is AccountType.SUPERADMIN
-        issued = self._sessions.issue(user, meta, mfa_verified=False)
+        issued = self._sessions.issue(user, meta)
         self._audit.record(
             actor=_as_actor(user),
             action=AuditAction.LOGIN_SUCCEEDED,
             meta=meta,
             target_type=AuditTarget.USER,
             target_public_id=user.public_id,
-            context={"mfa_pending": mfa_required},
         )
         await self._db.commit()
-        return LoginResult(issued=issued, user=user, mfa_required=mfa_required)
-
-    async def verify_mfa(self, ctx: AuthContext, code: str, meta: RequestMeta) -> IssuedSession:
-        user = ctx.user
-        if user.account_type is not AccountType.SUPERADMIN or ctx.session.mfa_verified_at:
-            raise MfaNotPending
-        await self._throttle.check(Rules.MFA_FAILURE_ACCOUNT, user.email)
-
-        step = (
-            matching_totp_step(self._encryptor.decrypt(user.totp_secret_encrypted), code, utcnow())
-            if user.totp_secret_encrypted
-            else None
-        )
-        replayed = (
-            step is not None
-            and user.totp_last_used_step is not None
-            and step <= user.totp_last_used_step
-        )
-        if step is None or replayed:
-            await self._throttle.record(Rules.MFA_FAILURE_ACCOUNT, user.email)
-            self._audit.record(
-                actor=_as_actor(user),
-                action=AuditAction.MFA_FAILED,
-                meta=meta,
-                context={"replayed": replayed},
-            )
-            await self._db.commit()
-            raise MfaInvalid
-
-        user.totp_last_used_step = step
-        await self._throttle.reset([Rules.MFA_FAILURE_ACCOUNT], user.email)
-        # Privilege changed: replace the session token.
-        self._sessions.revoke(ctx.session)
-        issued = self._sessions.issue(user, meta, mfa_verified=True)
-        self._audit.record(actor=_as_actor(user), action=AuditAction.MFA_SUCCEEDED, meta=meta)
-        await self._db.commit()
-        return issued
+        return LoginResult(issued=issued, user=user)
 
     async def logout(self, ctx: AuthContext, meta: RequestMeta) -> None:
         self._sessions.revoke(ctx.session)
@@ -315,9 +270,7 @@ class AuthService:
 
         self._set_password(user, new_password)
         await self._sessions.revoke_all(user)
-        issued = self._sessions.issue(
-            user, meta, mfa_verified=ctx.session.mfa_verified_at is not None
-        )
+        issued = self._sessions.issue(user, meta)
         self._notify_password_changed(user)
         self._audit.record(
             actor=_as_actor(user),

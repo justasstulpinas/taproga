@@ -33,9 +33,6 @@ class User(PublicIdMixin, TimestampMixin, Base):
     locale: Mapped[Locale] = mapped_column(enum_column(Locale, "locale"), default=Locale.LT)
     email_verified_at: Mapped[datetime | None]
     password_changed_at: Mapped[datetime] = mapped_column(default=utcnow)
-    totp_secret_encrypted: Mapped[str | None] = mapped_column(String(512))
-    # Last accepted TOTP time-step; a code can't be replayed within its validity window.
-    totp_last_used_step: Mapped[int | None]
     deleted_at: Mapped[datetime | None]
 
     newlywed_profile: Mapped["NewlywedProfile | None"] = relationship(

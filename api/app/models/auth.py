@@ -22,7 +22,6 @@ class UserSession(Base):
     last_seen_at: Mapped[datetime] = mapped_column(default=utcnow)
     expires_at: Mapped[datetime]
     revoked_at: Mapped[datetime | None]
-    mfa_verified_at: Mapped[datetime | None]
     ip: Mapped[str | None] = mapped_column(String(45))
     user_agent: Mapped[str | None] = mapped_column(String(255))
 

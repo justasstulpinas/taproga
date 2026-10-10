@@ -38,12 +38,11 @@ class MeOut(BaseModel):
     account_type: AccountType
     locale: Locale
     email_verified: bool
-    mfa_pending: bool
     newlywed_profile: NewlywedProfileOut | None
     service_profile: ServiceProfileOut | None
 
     @classmethod
-    def build(cls, user: User, *, mfa_pending: bool) -> "MeOut":
+    def build(cls, user: User) -> "MeOut":
         """`user` must have its profiles loaded."""
         return cls(
             id=user.public_id,
@@ -51,7 +50,6 @@ class MeOut(BaseModel):
             account_type=user.account_type,
             locale=user.locale,
             email_verified=user.is_email_verified,
-            mfa_pending=mfa_pending,
             newlywed_profile=(
                 NewlywedProfileOut.build(user.newlywed_profile) if user.newlywed_profile else None
             ),

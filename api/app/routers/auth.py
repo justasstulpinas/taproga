@@ -11,7 +11,6 @@ from app.dependencies import (
     get_optional_session_context,
 )
 from app.models.user import AccountType
-from app.policies.access import is_mfa_pending
 from app.routers.cookies import clear_session_cookie, set_session_cookie
 from app.schemas.auth import (
     AcceptedOut,
@@ -20,7 +19,6 @@ from app.schemas.auth import (
     ForgotPasswordIn,
     LoginIn,
     LoginOut,
-    MfaIn,
     RegisterIn,
     ResetPasswordIn,
     TokenIn,
@@ -66,25 +64,7 @@ async def login(
     result = await auth.login(body.email, body.password, meta)
     set_session_cookie(response, settings, result.issued)
     user = await auth.load_profiles(result.user)
-    return LoginOut(
-        mfa_required=result.mfa_required,
-        user=MeOut.build(user, mfa_pending=result.mfa_required),
-    )
-
-
-@router.post("/mfa")
-async def verify_mfa(
-    body: MfaIn,
-    ctx: SessionContext,
-    auth: Auth,
-    meta: Meta,
-    response: Response,
-    settings: AppSettings,
-) -> MeOut:
-    issued = await auth.verify_mfa(ctx, body.code, meta)
-    set_session_cookie(response, settings, issued)
-    user = await auth.load_profiles(ctx.user)
-    return MeOut.build(user, mfa_pending=False)
+    return LoginOut(user=MeOut.build(user))
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -104,7 +84,7 @@ async def logout(
 @router.get("/me")
 async def me(ctx: SessionContext, auth: Auth) -> MeOut:
     user = await auth.load_profiles(ctx.user)
-    return MeOut.build(user, mfa_pending=is_mfa_pending(ctx))
+    return MeOut.build(user)
 
 
 @router.post("/password/forgot", status_code=status.HTTP_202_ACCEPTED)

@@ -12,7 +12,6 @@ dependencies = [
     "httpx>=0.28.1",
     "pydantic[email]>=2.9",
     "pydantic-settings>=2.6",
-    "pyotp>=2.10.0",
     "sqlalchemy[asyncio]>=2.0.36",
     "uvicorn[standard]>=0.32",
 ]

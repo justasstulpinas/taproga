@@ -42,7 +42,7 @@ class SessionService:
         self._db = session
         self._repository = SessionRepository(session)
 
-    def issue(self, user: User, meta: RequestMeta, *, mfa_verified: bool = False) -> IssuedSession:
+    def issue(self, user: User, meta: RequestMeta) -> IssuedSession:
         """A fresh random token on every login and privilege change prevents session fixation."""
         now = utcnow()
         token = generate_token()
@@ -52,7 +52,6 @@ class SessionService:
             created_at=now,
             last_seen_at=now,
             expires_at=now + lifetime_for(user).absolute,
-            mfa_verified_at=now if mfa_verified else None,
             ip=meta.ip,
             user_agent=meta.user_agent[:USER_AGENT_MAX_LENGTH] if meta.user_agent else None,
         )

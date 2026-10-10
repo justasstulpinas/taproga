@@ -78,3 +78,8 @@ The defaults in roadmap §9 (service approval required, per-event plans, one pro
 - The page is photo-led: full-bleed, darkened black-and-white photos with cream text panels. Its look is the same whatever the visitor's OS theme.
 - This is a deliberate exception to UI-STANDARDS' "every screen works in light and dark". It applies only to /vaises; app screens still need both themes.
 - Rejected: a dark variant of the cream panels. It would mean redesigning the brand surface for little gain on a one-visit marketing page.
+
+## 2026-10-10 — Superadmin sign-in is password-only — Confirmed
+- Owner's decision for a single-operator admin: superadmin TOTP is removed (`/auth/mfa`, `security/totp.py`, migration 0002 drops the columns).
+- Deliberate exception to the standard "superadmin login requires the same or stronger auth (2FA if available)"; reverses the 2026-09-29 TOTP decision.
+- Still in place: escalating per-IP and per-account login lockouts, generic errors, superadmin sessions 30 min idle / 12 h absolute, audit entry on every sign-in and failure.

@@ -76,7 +76,6 @@ def get_auth_service(
     return AuthService(
         db,
         integrations=integrations,
-        encryptor=security.encryptor,
         hasher=security.hasher,
         links=security.links,
     )

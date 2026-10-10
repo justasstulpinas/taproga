@@ -18,9 +18,7 @@ from app.integrations import Integrations
 from app.main import create_app
 from app.models import Base, OutboxEmail
 from app.models.user import AccountType, Locale, User
-from app.security.encryption import FieldEncryptor
 from app.security.passwords import hash_password
-from app.security.totp import generate_totp_secret
 from app.settings import Environment, Settings
 
 # CI points this at Postgres so tests catch behaviour SQLite silently tolerates.
@@ -173,13 +171,11 @@ async def login(client: AsyncClient, email: str, password: str = STRONG_PASSWORD
 class SuperadminCredentials:
     email: str
     password: str
-    totp_secret: str
 
 
 async def create_superadmin(
     sessionmaker: SessionMaker, email: str = "admin@taproga.lt"
 ) -> SuperadminCredentials:
-    secret = generate_totp_secret()
     async with sessionmaker() as session:
         session.add(
             User(
@@ -188,8 +184,11 @@ async def create_superadmin(
                 account_type=AccountType.SUPERADMIN,
                 locale=Locale.EN,
                 email_verified_at=utcnow(),
-                totp_secret_encrypted=FieldEncryptor(TEST_ENCRYPTION_KEY).encrypt(secret),
             )
         )
         await session.commit()
-    return SuperadminCredentials(email=email, password=STRONG_PASSWORD, totp_secret=secret)
+    return SuperadminCredentials(email=email, password=STRONG_PASSWORD)
+
+
+async def admin_login(client: AsyncClient, creds: SuperadminCredentials) -> None:
+    await login(client, creds.email, creds.password)
