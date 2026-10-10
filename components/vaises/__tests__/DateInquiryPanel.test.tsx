@@ -90,3 +90,35 @@ test("retry reuses the idempotency key", async () => {
   ]);
   expect(postBodies[1]).toMatchObject({ contact: CONTACT, locale: "lt", turnstile_token: "dev" });
 });
+
+test("a stale failure after changing the date neither shows an error nor wastes the new key", async () => {
+  submitResponses.push(
+    jsonResponse(500, { error: { code: "INTERNAL_ERROR" } }),
+    jsonResponse(500, { error: { code: "INTERNAL_ERROR" } }),
+  );
+  let release!: () => void;
+  submitGate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const user = userEvent.setup();
+  const input = await openResultStep(user);
+  await user.type(input, CONTACT);
+  await user.click(screen.getByRole("button", { name: "Siųsti užklausą" }));
+  await user.click(screen.getByRole("button", { name: "Keisti datą" }));
+
+  submitGate = Promise.resolve();
+  release();
+  await waitFor(() => expect(postBodies).toHaveLength(1));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(screen.queryByRole("alert")).toBeNull();
+
+  await user.click(screen.getByRole("button", { name: "Tikrinti" }));
+  await screen.findByRole("textbox", {}, { timeout: 3000 });
+  await user.click(screen.getByRole("button", { name: "Siųsti užklausą" }));
+  await screen.findByRole("alert");
+  await user.click(screen.getByRole("button", { name: "Siųsti užklausą" }));
+  await waitFor(() => expect(postBodies).toHaveLength(3));
+
+  expect(postBodies[1].idempotency_key).not.toBe(postBodies[0].idempotency_key);
+  expect(postBodies[2].idempotency_key).toBe(postBodies[1].idempotency_key);
+});

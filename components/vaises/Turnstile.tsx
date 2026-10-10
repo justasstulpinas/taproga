@@ -4,6 +4,8 @@ const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 // Accepted by the local AllowAllHumanVerifier only; production always has a site key.
 const DEV_TOKEN = "dev";
+// A challenge the visitor ignores must not leave the optimistic thank-you up forever.
+const TOKEN_TIMEOUT_MS = 45_000;
 
 type TurnstileApi = {
   render: (container: HTMLElement, options: Record<string, unknown>) => string;
@@ -66,7 +68,24 @@ export default function Turnstile({ ref }: { ref: Ref<TurnstileHandle> }) {
       if (!SITE_KEY) return DEV_TOKEN;
       const { api, widgetId } = await ensureWidget();
       return new Promise<string>((resolve, reject) => {
-        pendingRef.current = { resolve, reject };
+        const settle = () => {
+          clearTimeout(timer);
+          pendingRef.current = null;
+        };
+        const timer = setTimeout(() => {
+          settle();
+          reject(new Error("Turnstile timed out"));
+        }, TOKEN_TIMEOUT_MS);
+        pendingRef.current = {
+          resolve: (token) => {
+            settle();
+            resolve(token);
+          },
+          reject: (error) => {
+            settle();
+            reject(error);
+          },
+        };
         api.reset(widgetId);
         api.execute(widgetId);
       });

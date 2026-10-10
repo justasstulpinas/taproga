@@ -155,8 +155,10 @@ export default function DateInquiryPanel({
     try {
       const turnstileToken = (await turnstileRef.current?.getToken()) ?? "";
       await submitDateInquiry({ ...inquiry, idempotencyKey, turnstileToken });
-      idempotencyKeyRef.current = null;
+      if (idempotencyKeyRef.current === idempotencyKey) idempotencyKeyRef.current = null;
     } catch (error) {
+      // A reset since this send started means the error belongs to an abandoned inquiry.
+      if (idempotencyKeyRef.current !== idempotencyKey) return;
       setSendError(messageFor(error));
       setSend("error");
     }
