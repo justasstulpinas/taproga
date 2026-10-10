@@ -28,10 +28,13 @@ class AuditAction(StrEnum):
     ADMIN_FORCE_VERIFIED_EMAIL = "admin.force_verified_email"
     ADMIN_TRIGGERED_PASSWORD_RESET = "admin.triggered_password_reset"
     ADMIN_UNLOCKED_ACCOUNT = "admin.unlocked_account"
+    VAISES_DATE_BLOCKED = "vaises.date_blocked"
+    VAISES_DATE_UNBLOCKED = "vaises.date_unblocked"
 
 
 class AuditTarget(StrEnum):
     USER = "user"
+    VAISES_BLOCKED_DATE = "vaises_blocked_date"
 
 
 @dataclass(frozen=True)

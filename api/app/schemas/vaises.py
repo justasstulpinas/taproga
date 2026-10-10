@@ -1,7 +1,7 @@
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainValidator
@@ -81,3 +81,16 @@ class DateInquiryIn(ConsultationIn):
 class AvailabilityOut(BaseModel):
     date: date
     availability: Availability
+
+
+class BlockDateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    date: IsoDate
+    # Blocking is idempotent on the date itself; the key is accepted for client symmetry.
+    idempotency_key: uuid.UUID
+
+
+class BlockedDateOut(BaseModel):
+    date: date
+    created_at: datetime

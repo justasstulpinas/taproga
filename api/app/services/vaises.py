@@ -6,17 +6,24 @@ from datetime import date
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain_errors import HumanVerificationFailed
+from app.domain_errors import HumanVerificationFailed, InvalidDate
 from app.emails.templates import EmailTemplate
 from app.integrations.human_verification import HumanVerifier
+from app.models.audit import ActorKind
 from app.models.user import Locale
-from app.models.vaises import Availability, ContactKind, RequestKind, VaisesRequest
+from app.models.vaises import (
+    Availability,
+    BlockedDate,
+    ContactKind,
+    RequestKind,
+    VaisesRequest,
+)
 from app.repositories.vaises import VaisesRepository
 from app.schemas.vaises import ConsultationIn, Contact, DateInquiryIn
 from app.security.encryption import FieldEncryptor
 from app.security.tokens import SubjectHasher
-from app.services.audit import AuditService
-from app.services.context import RequestMeta
+from app.services.audit import Actor, AuditAction, AuditService, AuditTarget
+from app.services.context import AuthContext, RequestMeta
 from app.services.email_queue import EmailQueue, LinkBuilder
 from app.services.throttle import Rules, SubjectKind, Throttle
 from app.services.vaises_dates import ensure_bookable, format_date_lt
@@ -25,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 UNKNOWN_IP = "unknown"
 ADMIN_REQUESTS_PATH = "/admin/vaises/uzklausos"
+BLOCKED_RANGE_MAX_DAYS = 400
 
 # The owner notification is always Lithuanian, so its labels are too.
 KIND_LABELS_LT = {
@@ -75,6 +83,54 @@ class VaisesService:
 
     async def submit_consultation(self, body: ConsultationIn, meta: RequestMeta) -> None:
         await self._submit(RequestKind.CONSULTATION, body, None, meta)
+
+    async def list_blocked(self, from_: date, to: date) -> list[BlockedDate]:
+        if to < from_ or (to - from_).days > BLOCKED_RANGE_MAX_DAYS:
+            raise InvalidDate
+        return await self._repository.list_blocked(from_, to)
+
+    async def block(self, ctx: AuthContext, value: date, meta: RequestMeta) -> BlockedDate:
+        ensure_bookable(value, self._today())
+        existing = await self._repository.get_blocked(value)
+        if existing is not None:
+            return existing
+        # Read before the commit: a rollback expires the context's user.
+        admin_id = ctx.user.id
+        blocked = BlockedDate(public_id=uuid.uuid4(), date=value, created_by_user_id=admin_id)
+        self._repository.add_blocked(blocked)
+        self._audit.record(
+            actor=Actor(kind=ActorKind.SUPERADMIN, user_id=admin_id),
+            action=AuditAction.VAISES_DATE_BLOCKED,
+            meta=meta,
+            target_type=AuditTarget.VAISES_BLOCKED_DATE,
+            target_public_id=blocked.public_id,
+            after={"date": value.isoformat()},
+        )
+        try:
+            await self._session.commit()
+        except IntegrityError:
+            # A concurrent twin blocked the same date first; it wrote the audit entry.
+            await self._session.rollback()
+            twin = await self._repository.get_blocked(value)
+            if twin is None:
+                raise
+            return twin
+        return blocked
+
+    async def unblock(self, ctx: AuthContext, value: date, meta: RequestMeta) -> None:
+        blocked = await self._repository.get_blocked(value)
+        if blocked is None:
+            return
+        self._audit.record(
+            actor=Actor(kind=ActorKind.SUPERADMIN, user_id=ctx.user.id),
+            action=AuditAction.VAISES_DATE_UNBLOCKED,
+            meta=meta,
+            target_type=AuditTarget.VAISES_BLOCKED_DATE,
+            target_public_id=blocked.public_id,
+            before={"date": value.isoformat()},
+        )
+        await self._repository.delete_blocked(blocked)
+        await self._session.commit()
 
     async def _availability_on(self, value: date) -> Availability:
         if await self._repository.is_blocked(value):
