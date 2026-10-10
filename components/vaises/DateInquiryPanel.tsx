@@ -27,11 +27,12 @@ import {
   submitDateInquiry,
   type DateAvailability,
 } from "@/services/vaises/dateInquiry";
+import { messageFor } from "@/lib/api/errors";
 import { withMinimumDuration } from "@/lib/withMinimumDuration";
+import Turnstile, { type TurnstileHandle } from "./Turnstile";
 
 // Long enough to read the "checking" state; with a real backend, slower responses aren't padded.
 const MIN_CHECK_DISPLAY_MS = 900;
-const MIN_SEND_DISPLAY_MS = 600;
 
 type CheckState =
   | { status: "idle" }
@@ -39,7 +40,7 @@ type CheckState =
   | { status: "result"; availability: DateAvailability }
   | { status: "error" };
 
-type SendState = "idle" | "sending" | "sent" | "error";
+type SendState = "idle" | "sent" | "error";
 
 type DateInquiryPanelProps = {
   id: string;
@@ -58,6 +59,9 @@ export default function DateInquiryPanel({
   const formId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const contactRef = useRef<HTMLInputElement>(null);
+  const turnstileRef = useRef<TurnstileHandle>(null);
+  // One key per inquiry: a retry after a failure must not create a second request.
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   // Set after mount so server and client render the same markup regardless of timezone.
   const [today, setToday] = useState<Date | null>(null);
@@ -69,6 +73,7 @@ export default function DateInquiryPanel({
   const [attemptedSend, setAttemptedSend] = useState(false);
   const [send, setSend] = useState<SendState>("idle");
   const [sentTo, setSentTo] = useState<ContactValue | null>(null);
+  const [sendError, setSendError] = useState("");
 
   const showResult = check.status === "result";
   const calendarHidden = showResult || check.status === "checking";
@@ -104,6 +109,7 @@ export default function DateInquiryPanel({
   );
 
   function resetInquiry() {
+    idempotencyKeyRef.current = null;
     setCheck({ status: "idle" });
     setSend("idle");
     setAttemptedSend(false);
@@ -142,7 +148,21 @@ export default function DateInquiryPanel({
     }
   }
 
-  async function handleSend(event: FormEvent<HTMLFormElement>) {
+  async function deliver(
+    inquiry: { isoDate: string; availability: DateAvailability; contact: ContactValue },
+    idempotencyKey: string,
+  ) {
+    try {
+      const turnstileToken = (await turnstileRef.current?.getToken()) ?? "";
+      await submitDateInquiry({ ...inquiry, idempotencyKey, turnstileToken });
+      idempotencyKeyRef.current = null;
+    } catch (error) {
+      setSendError(messageFor(error));
+      setSend("error");
+    }
+  }
+
+  function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedDate || check.status !== "result") return;
     setAttemptedSend(true);
@@ -152,21 +172,14 @@ export default function DateInquiryPanel({
       return;
     }
     setContactInvalid(false);
-    setSend("sending");
-    try {
-      await withMinimumDuration(
-        submitDateInquiry({
-          isoDate: toIsoDate(selectedDate),
-          availability: check.availability,
-          contact: parsed,
-        }),
-        MIN_SEND_DISPLAY_MS,
-      );
-      setSentTo(parsed);
-      setSend("sent");
-    } catch {
-      setSend("error");
-    }
+    idempotencyKeyRef.current ??= crypto.randomUUID();
+    // Optimistic: show the thank-you now; a rejection restores the form with the contact kept.
+    setSentTo(parsed);
+    setSend("sent");
+    void deliver(
+      { isoDate: toIsoDate(selectedDate), availability: check.availability, contact: parsed },
+      idempotencyKeyRef.current,
+    );
   }
 
   const isReserved =
@@ -333,7 +346,7 @@ export default function DateInquiryPanel({
                     )}
                     {send === "error" && (
                       <p className="vaises-date-error" role="alert">
-                        Nepavyko išsiųsti. Bandykite dar kartą.
+                        {sendError}
                       </p>
                     )}
                   </form>
@@ -370,9 +383,8 @@ export default function DateInquiryPanel({
                     type="submit"
                     form={formId}
                     className="vaises-date-primary vaises-date-primary-delayed"
-                    disabled={send === "sending"}
                   >
-                    {send === "sending" ? "Siunčiama…" : "Siųsti užklausą"}
+                    Siųsti užklausą
                   </button>
                 )
               ) : (
@@ -396,6 +408,7 @@ export default function DateInquiryPanel({
           </div>
         </div>
       </div>
+      <Turnstile ref={turnstileRef} />
     </aside>
   );
 }

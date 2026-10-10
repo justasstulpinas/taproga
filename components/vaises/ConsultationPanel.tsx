@@ -1,11 +1,10 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { describeContactLt, parseContact, type ContactValue } from "@/lib/vaises/dateInquiry";
-import { withMinimumDuration } from "@/lib/withMinimumDuration";
+import { messageFor } from "@/lib/api/errors";
 import { submitConsultationRequest } from "@/services/vaises/dateInquiry";
+import Turnstile, { type TurnstileHandle } from "./Turnstile";
 
-const MIN_SEND_DISPLAY_MS = 600;
-
-type SendState = "idle" | "sending" | "sent" | "error";
+type SendState = "idle" | "sent" | "error";
 
 type ConsultationPanelProps = {
   id: string;
@@ -20,12 +19,16 @@ export default function ConsultationPanel({ id, isOpen, onClose }: ConsultationP
   const contactErrorId = useId();
   const formId = useId();
   const contactRef = useRef<HTMLInputElement>(null);
+  const turnstileRef = useRef<TurnstileHandle>(null);
+  // One key per open panel: a retry after a failure must not create a second request.
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const [contact, setContact] = useState("");
   const [contactInvalid, setContactInvalid] = useState(false);
   const [attemptedSend, setAttemptedSend] = useState(false);
   const [send, setSend] = useState<SendState>("idle");
   const [sentTo, setSentTo] = useState<ContactValue | null>(null);
+  const [sendError, setSendError] = useState("");
 
   useEffect(() => {
     if (isOpen) {
@@ -41,7 +44,18 @@ export default function ConsultationPanel({ id, isOpen, onClose }: ConsultationP
     }
   }
 
-  async function handleSend(event: FormEvent<HTMLFormElement>) {
+  async function deliver(parsed: ContactValue, idempotencyKey: string) {
+    try {
+      const turnstileToken = (await turnstileRef.current?.getToken()) ?? "";
+      await submitConsultationRequest(parsed, { idempotencyKey, turnstileToken });
+      idempotencyKeyRef.current = null;
+    } catch (error) {
+      setSendError(messageFor(error));
+      setSend("error");
+    }
+  }
+
+  function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAttemptedSend(true);
     const parsed = parseContact(contact);
@@ -50,14 +64,11 @@ export default function ConsultationPanel({ id, isOpen, onClose }: ConsultationP
       return;
     }
     setContactInvalid(false);
-    setSend("sending");
-    try {
-      await withMinimumDuration(submitConsultationRequest(parsed), MIN_SEND_DISPLAY_MS);
-      setSentTo(parsed);
-      setSend("sent");
-    } catch {
-      setSend("error");
-    }
+    idempotencyKeyRef.current ??= crypto.randomUUID();
+    // Optimistic: show the thank-you now; a rejection restores the form with the contact kept.
+    setSentTo(parsed);
+    setSend("sent");
+    void deliver(parsed, idempotencyKeyRef.current);
   }
 
   return (
@@ -107,7 +118,7 @@ export default function ConsultationPanel({ id, isOpen, onClose }: ConsultationP
                 {contactInvalid
                   ? "Įveskite el. pašto adresą arba telefono numerį."
                   : send === "error"
-                    ? "Nepavyko išsiųsti. Bandykite dar kartą."
+                    ? sendError
                     : ""}
               </p>
             </form>
@@ -119,9 +130,8 @@ export default function ConsultationPanel({ id, isOpen, onClose }: ConsultationP
                 type="submit"
                 form={formId}
                 className="vaises-date-primary"
-                disabled={send === "sending"}
               >
-                {send === "sending" ? "Siunčiama…" : "Siųsti užklausą"}
+                Siųsti užklausą
               </button>
             )}
             <button type="button" className="vaises-entry-detail-close" onClick={onClose}>
@@ -130,6 +140,7 @@ export default function ConsultationPanel({ id, isOpen, onClose }: ConsultationP
           </div>
         </div>
       </div>
+      <Turnstile ref={turnstileRef} />
     </aside>
   );
 }
