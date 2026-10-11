@@ -202,19 +202,54 @@ describe("mark handled", () => {
     await act(async () => pending.resolve(json(200, { ...FIRST, status: "handled" })));
   });
 
-  it("undo during the in-flight handle is ignored and cannot be overwritten by the stale response", async () => {
+  it("undo during the in-flight handle is queued and reopens once handled settles", async () => {
+    const pending = deferred();
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce(json(200, FIRST));
+    vi.stubGlobal("fetch", fetchMock);
+    renderList();
+    fireEvent.click(within(row(/lapkričio 14/)).getByRole("button", { name: "Pažymėti atsakytu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Atšaukti" }));
+    const busy = screen.getByRole("button", { name: "Atšaukiama…" });
+    expect(busy.getAttribute("aria-busy")).toBe("true");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve(json(200, { ...FIRST, status: "handled" })));
+    expect(urls(fetchMock)).toEqual([
+      "/api/v1/admin/vaises/requests/r1/handled",
+      "/api/v1/admin/vaises/requests/r1/reopen",
+    ]);
+    expect(row(/lapkričio 14/)).toBeTruthy();
+    expect(screen.queryByText(/Pažymėta atsakytu/)).toBeNull();
+  });
+
+  it("keeps the notice past 5 s while a queued undo waits for a slow handled call", async () => {
+    const pending = deferred();
+    const fetchMock = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValueOnce(json(200, FIRST));
+    vi.stubGlobal("fetch", fetchMock);
+    renderList();
+    fireEvent.click(within(row(/lapkričio 14/)).getByRole("button", { name: "Pažymėti atsakytu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Atšaukti" }));
+    await act(async () => vi.advanceTimersByTime(8000));
+    expect(screen.getByRole("button", { name: "Atšaukiama…" })).toBeTruthy();
+    await act(async () => pending.resolve(json(200, { ...FIRST, status: "handled" })));
+    expect(urls(fetchMock)[1]).toBe("/api/v1/admin/vaises/requests/r1/reopen");
+    expect(screen.queryByRole("button", { name: /Atšauk/ })).toBeNull();
+  });
+
+  it("a failed handle with a queued undo sends no reopen and restores the row with the error", async () => {
     const pending = deferred();
     const fetchMock = vi.fn().mockReturnValue(pending.promise);
     vi.stubGlobal("fetch", fetchMock);
     renderList();
     fireEvent.click(within(row(/lapkričio 14/)).getByRole("button", { name: "Pažymėti atsakytu" }));
-    const undo = screen.getByRole("button", { name: "Atšaukti" });
-    expect(undo.getAttribute("aria-busy")).toBe("true");
-    fireEvent.click(undo);
+    fireEvent.click(screen.getByRole("button", { name: "Atšaukti" }));
+    await act(async () => pending.reject(new Error("offline")));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    await act(async () => pending.resolve(json(200, { ...FIRST, status: "handled" })));
-    expect(screen.queryByRole("listitem", { name: /lapkričio 14/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Atšaukti" }).getAttribute("aria-busy")).toBeNull();
+    expect(row(/lapkričio 14/)).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("2026 m. lapkričio 14 d.");
+    expect(screen.queryByRole("button", { name: /Atšauk/ })).toBeNull();
   });
 });
 
@@ -230,6 +265,13 @@ describe("erase", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByText("jonas@example.com")).toBeTruthy();
+  });
+
+  it("focuses the safe cancel button when the dialog opens", () => {
+    renderList();
+    fireEvent.click(within(row(/lapkričio 14/)).getByRole("button", { name: "Ištrinti kontaktus" }));
+    const cancel = within(screen.getByRole("dialog")).getByRole("button", { name: "Neištrinti" });
+    expect(document.activeElement).toBe(cancel);
   });
 
   it("Escape (the dialog's close event) dismisses without erasing", () => {

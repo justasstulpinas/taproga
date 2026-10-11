@@ -83,8 +83,11 @@ function Skeleton() {
 
 function EraseDialog({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     ref.current?.showModal();
+    // showModal focuses the first focusable element; make the safe choice the default.
+    cancelRef.current?.focus();
   }, []);
   return (
     <dialog
@@ -97,12 +100,12 @@ function EraseDialog({ onConfirm, onClose }: { onConfirm: () => void; onClose: (
         {copy.eraseTitle}
       </h2>
       <p className="mb-6 text-sm leading-relaxed text-[var(--text-secondary)]">{copy.eraseBody}</p>
-      <div className="flex flex-col gap-2 sm:flex-row-reverse">
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <button type="button" ref={cancelRef} onClick={() => ref.current?.close()} className={BUTTON_CLASS}>
+          {copy.eraseCancel}
+        </button>
         <button type="button" onClick={onConfirm} className={`${BUTTON_CLASS} bg-[var(--accent-dark)] text-[var(--bg-main)]`}>
           {copy.eraseConfirm}
-        </button>
-        <button type="button" autoFocus onClick={() => ref.current?.close()} className={BUTTON_CLASS}>
-          {copy.eraseCancel}
         </button>
       </div>
     </dialog>
@@ -177,8 +180,9 @@ export default function RequestsList(props: Props) {
   const [lists, setLists] = useState<Lists>(() => initialLists(props));
   const [notices, setNotices] = useState<Notice[]>([]);
   const [erasing, setErasing] = useState<VaisesRequestOut | null>(null);
-  const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
+  const [undoPending, setUndoPending] = useState<ReadonlySet<string>>(new Set());
   const inFlight = useRef(new Set<string>());
+  const undoIntents = useRef(new Set<string>());
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const noticeKey = useRef(0);
 
@@ -204,13 +208,17 @@ export default function RequestsList(props: Props) {
   function begin(id: string): boolean {
     if (inFlight.current.has(id)) return false;
     inFlight.current.add(id);
-    setBusyIds(new Set(inFlight.current));
     return true;
   }
 
   function finish(id: string) {
     inFlight.current.delete(id);
-    setBusyIds(new Set(inFlight.current));
+  }
+
+  function setUndoIntent(id: string, pending: boolean) {
+    if (pending) undoIntents.current.add(id);
+    else undoIntents.current.delete(id);
+    setUndoPending(new Set(undoIntents.current));
   }
 
   function addNotice(notice: NewNotice): number {
@@ -262,21 +270,32 @@ export default function RequestsList(props: Props) {
     if (!begin(request.id)) return;
     remove("new", request.id);
     const key = addNotice({ kind: "undo", request });
-    timers.current.set(key, setTimeout(() => dismiss(key), UNDO_WINDOW_MS));
+    // A queued undo keeps its notice on screen until the handled call settles.
+    timers.current.set(key, setTimeout(() => !undoIntents.current.has(request.id) && dismiss(key), UNDO_WINDOW_MS));
     try {
       place(await markHandled(request.id));
     } catch {
+      setUndoIntent(request.id, false);
       dismiss(key);
       place(request);
       fail(copy.handleFailed(nameOf(request)));
+      return;
     } finally {
       finish(request.id);
+    }
+    if (undoIntents.current.has(request.id)) {
+      setUndoIntent(request.id, false);
+      await undo({ key, kind: "undo", request });
     }
   }
 
   async function undo(notice: Extract<Notice, { kind: "undo" }>) {
     const { request } = notice;
-    if (!begin(request.id)) return;
+    if (inFlight.current.has(request.id)) {
+      setUndoIntent(request.id, true);
+      return;
+    }
+    begin(request.id);
     dismiss(notice.key);
     remove("handled", request.id);
     place(request);
@@ -337,11 +356,11 @@ export default function RequestsList(props: Props) {
               <span>{copy.handledNotice} ·</span>
               <button
                 type="button"
-                aria-busy={busyIds.has(notice.request.id) ? true : undefined}
+                aria-busy={undoPending.has(notice.request.id) ? true : undefined}
                 onClick={() => void undo(notice)}
                 className={`inline-flex min-h-[2.95rem] items-center underline underline-offset-4 aria-busy:opacity-50 ${FOCUS}`}
               >
-                {copy.undo}
+                {undoPending.has(notice.request.id) ? copy.undoing : copy.undo}
               </button>
             </p>
           ) : (

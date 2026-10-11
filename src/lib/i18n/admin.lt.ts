@@ -53,6 +53,7 @@ export const adminLt = {
     erase: "Ištrinti kontaktus",
     handledNotice: "Pažymėta atsakytu",
     undo: "Atšaukti",
+    undoing: "Atšaukiama…",
     eraseTitle: "Ištrinti kontaktus?",
     eraseBody: "Kontaktas bus ištrintas negrįžtamai. Užklausa liks sąraše be kontaktinių duomenų.",
     eraseConfirm: "Ištrinti kontaktus",
