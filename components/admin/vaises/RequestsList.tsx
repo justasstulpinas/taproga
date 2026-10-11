@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useSessionExpiry } from "@/lib/admin/sessionExpiry";
 import { adminLt } from "@/lib/i18n/admin.lt";
 import {
   erase,
@@ -185,6 +186,7 @@ export default function RequestsList(props: Props) {
   const undoIntents = useRef(new Set<string>());
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const noticeKey = useRef(0);
+  const onSessionExpired = useSessionExpiry();
 
   useEffect(() => {
     if (highlightId) document.getElementById(`request-${highlightId}`)?.scrollIntoView?.({ block: "center" });
@@ -248,8 +250,9 @@ export default function RequestsList(props: Props) {
         const fresh = page.items.filter((item) => !known.has(item.id));
         return { items: [...current.items, ...fresh], next: page.next_cursor, loaded: true, busy: false, failed: false };
       });
-    } catch {
+    } catch (caught) {
       patch(status, (current) => ({ ...current, busy: false, failed: true }));
+      onSessionExpired(caught);
     }
   }
 
@@ -274,11 +277,12 @@ export default function RequestsList(props: Props) {
     timers.current.set(key, setTimeout(() => !undoIntents.current.has(request.id) && dismiss(key), UNDO_WINDOW_MS));
     try {
       place(await markHandled(request.id));
-    } catch {
+    } catch (caught) {
       setUndoIntent(request.id, false);
       dismiss(key);
       place(request);
       fail(copy.handleFailed(nameOf(request)));
+      onSessionExpired(caught);
       return;
     } finally {
       finish(request.id);
@@ -301,10 +305,11 @@ export default function RequestsList(props: Props) {
     place(request);
     try {
       place(await reopen(request.id));
-    } catch {
+    } catch (caught) {
       remove("new", request.id);
       place({ ...request, status: "handled" });
       fail(copy.reopenFailed(nameOf(request)));
+      onSessionExpired(caught);
     } finally {
       finish(request.id);
     }
@@ -317,9 +322,10 @@ export default function RequestsList(props: Props) {
     place({ ...request, contact: null, contact_kind: null, anonymised_at: new Date().toISOString() });
     try {
       place(await erase(request.id));
-    } catch {
+    } catch (caught) {
       place(request);
       fail(copy.eraseFailed(nameOf(request)));
+      onSessionExpired(caught);
     } finally {
       finish(request.id);
     }

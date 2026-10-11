@@ -2,8 +2,9 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import type { GetServerSidePropsContext } from "next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const push = vi.fn();
 vi.mock("next/router", () => ({
-  useRouter: () => ({ pathname: "/admin/vaises/uzklausos", push: vi.fn() }),
+  useRouter: () => ({ pathname: "/admin/vaises/uzklausos", asPath: "/admin/vaises/uzklausos?id=r1", push }),
 }));
 
 import RequestsList from "../RequestsList";
@@ -74,6 +75,7 @@ function row(name: RegExp): HTMLElement {
 }
 
 beforeEach(() => {
+  push.mockReset();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   HTMLDialogElement.prototype.showModal = function showModal() {
     this.setAttribute("open", "");
@@ -181,6 +183,14 @@ describe("mark handled", () => {
       "Nepavyko pažymėti atsakytu: 2026 m. lapkričio 14 d. Bandykite dar kartą.",
     );
     expect(screen.queryByText(/Pažymėta atsakytu$/)).toBeNull();
+  });
+
+  it("a 401 on handle restores the row and sends the admin to sign in again", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(401, { error: { code: "UNAUTHENTICATED" } })));
+    renderList();
+    await act(async () => fireEvent.click(within(row(/lapkričio 14/)).getByRole("button", { name: "Pažymėti atsakytu" })));
+    expect(row(/lapkričio 14/)).toBeTruthy();
+    expect(push).toHaveBeenCalledWith("/admin/login?next=%2Fadmin%2Fvaises%2Fuzklausos%3Fid%3Dr1");
   });
 
   it("a failed handle on a consultation names \"konsultacija\"", async () => {

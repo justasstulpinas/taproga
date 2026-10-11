@@ -7,6 +7,9 @@ import { safeNext } from "@/lib/admin/safeNext";
 import { adminLt } from "@/lib/i18n/admin.lt";
 
 const copy = adminLt.login;
+const SUPERADMIN = "superadmin";
+
+type LoginOut = { user: { account_type: string } };
 
 function loginErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -19,7 +22,7 @@ function loginErrorMessage(error: unknown): string {
 }
 
 const FIELD_CLASS =
-  "min-h-[2.95rem] w-full rounded-[var(--radius-md)] border border-[var(--line-strong)] bg-white px-[var(--control-pad-x)] text-base text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-dark)]";
+  "min-h-[2.95rem] w-full rounded-[var(--radius-md)] border border-[var(--line-strong)] bg-[var(--bg-main)] px-[var(--control-pad-x)] text-base text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-dark)]";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -34,7 +37,17 @@ export default function AdminLoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await apiFetch("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      const { user } = await apiFetch<LoginOut>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      if (user.account_type !== SUPERADMIN) {
+        // Valid credentials for a regular account: don't leave it signed in on the admin site.
+        await apiFetch<void>("/auth/logout", { method: "POST" }).catch(() => undefined);
+        setError(copy.notSuperadmin);
+        setSubmitting(false);
+        return;
+      }
       await router.push(safeNext(router.query.next));
     } catch (caught) {
       setError(loginErrorMessage(caught));

@@ -1,13 +1,11 @@
 import type { GetServerSidePropsContext, Redirect } from "next";
 import { serverApiFetch } from "@/lib/admin/serverApi";
+import { adminLoginPath } from "@/lib/admin/sessionExpiry";
 
 const SUPERADMIN = "superadmin";
-const LOGIN_PATH = "/admin/login";
 
 function loginRedirect(path: string): { redirect: Redirect } {
-  return {
-    redirect: { destination: `${LOGIN_PATH}?next=${encodeURIComponent(path)}`, permanent: false },
-  };
+  return { redirect: { destination: adminLoginPath(path), permanent: false } };
 }
 
 async function isSuperadmin(cookie: string | undefined): Promise<boolean> {

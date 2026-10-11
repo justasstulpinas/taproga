@@ -11,6 +11,7 @@ vi.mock("next/router", () => ({
 import LoginPage from "../../../pages/admin/login";
 
 const WRONG = "Neteisingas el. paštas arba slaptažodis.";
+const SUPERADMIN = { user: { account_type: "superadmin" } };
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status });
@@ -74,8 +75,23 @@ describe("admin login", () => {
     );
   });
 
+  it("signs a non-superadmin back out and says so instead of navigating", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { user: { account_type: "newlywed" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<LoginPage />);
+    await fillAndSubmit();
+    expect((await screen.findByRole("alert")).textContent).toBe("Ši paskyra neturi prieigos prie administravimo.");
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/auth/logout");
+    expect((fetchMock.mock.calls[1][1] as RequestInit).method).toBe("POST");
+    expect(push).not.toHaveBeenCalled();
+    expect((screen.getByRole("button", { name: "Prisijungti" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("goes to the uzklausos page by default on success", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { user: {} })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, SUPERADMIN)));
     render(<LoginPage />);
     await fillAndSubmit();
     await waitFor(() => expect(push).toHaveBeenCalledWith("/admin/vaises/uzklausos"));
@@ -83,7 +99,7 @@ describe("admin login", () => {
 
   it("follows a safe next path", async () => {
     query = { next: "/admin/vaises/datos" };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { user: {} })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, SUPERADMIN)));
     render(<LoginPage />);
     await fillAndSubmit();
     await waitFor(() => expect(push).toHaveBeenCalledWith("/admin/vaises/datos"));
@@ -91,7 +107,7 @@ describe("admin login", () => {
 
   it.each(["https://evil.example", "//evil.example"])("ignores a malicious next %s", async (next) => {
     query = { next };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { user: {} })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, SUPERADMIN)));
     render(<LoginPage />);
     await fillAndSubmit();
     await waitFor(() => expect(push).toHaveBeenCalledWith("/admin/vaises/uzklausos"));
