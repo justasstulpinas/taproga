@@ -18,6 +18,12 @@ class EmailTemplate(StrEnum):
     VAISES_RECEIPT_CONSULTATION = "vaises_receipt_consultation"
 
 
+# Sent to the visitor's contact, which is otherwise stored only encrypted.
+VAISES_RECEIPTS = frozenset(
+    {EmailTemplate.VAISES_RECEIPT_DATE, EmailTemplate.VAISES_RECEIPT_CONSULTATION}
+)
+
+
 @dataclass(frozen=True)
 class _Copy:
     subject: str

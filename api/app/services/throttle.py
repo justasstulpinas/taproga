@@ -62,6 +62,10 @@ class Rules:
     TOKEN_REDEEM_IP = ThrottleRule("token_redeem_ip", SubjectKind.IP, 20, HOUR, MINUTE, HOUR)
     VAISES_AVAILABILITY_IP = ThrottleRule("vaises_avail_ip", SubjectKind.IP, 60, HOUR, MINUTE, HOUR)
     VAISES_SUBMIT_IP = ThrottleRule("vaises_submit_ip", SubjectKind.IP, 5, HOUR, 5 * MINUTE, DAY)
+    # Counts every attempt, failed ones included, so bots can't hammer Turnstile for free.
+    VAISES_SUBMIT_ATTEMPT_IP = ThrottleRule(
+        "vaises_submit_attempt_ip", SubjectKind.IP, 30, HOUR, 5 * MINUTE, DAY
+    )
     # Keyed by the normalised contact, so one inbox or phone can't be flooded with receipts.
     VAISES_SUBMIT_RECIPIENT = ThrottleRule(
         "vaises_submit_recipient", SubjectKind.CONTACT, 3, DAY, HOUR, DAY

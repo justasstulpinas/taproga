@@ -20,6 +20,18 @@ class FailingSender:
         raise ConnectionError("provider down")
 
 
+class RecipientEchoingSender:
+    """Fails like providers that quote the rejected address in their error."""
+
+    def __init__(self, failures: int) -> None:
+        self.failures = failures
+
+    async def send(self, message: EmailMessage, sender: str) -> None:
+        if self.failures > 0:
+            self.failures -= 1
+            raise ConnectionError(f"mailbox {message.to} unavailable")
+
+
 async def test_worker_delivers_and_scrubs_the_one_time_link(
     client: AsyncClient, sessionmaker: SessionMaker
 ) -> None:
@@ -148,7 +160,7 @@ async def test_vaises_receipt_recipient_is_redacted_when_dead_lettered(
     email_id = await queue(sessionmaker, EmailTemplate.VAISES_RECEIPT_CONSULTATION, VISITOR, {})
 
     for _ in range(MAX_ATTEMPTS):
-        await deliver_due_emails(sessionmaker, FailingSender(), SENDER)
+        await deliver_due_emails(sessionmaker, RecipientEchoingSender(failures=1), SENDER)
         async with sessionmaker() as session:  # make the retry due immediately
             await session.execute(
                 update(OutboxEmail).values(next_attempt_at=utcnow() - timedelta(seconds=1))
@@ -159,6 +171,28 @@ async def test_vaises_receipt_recipient_is_redacted_when_dead_lettered(
     assert email.status is OutboxStatus.DEAD
     assert email.to_address == ""
     assert email.payload is None
+    assert email.last_error is None
+
+
+async def test_vaises_receipt_error_is_redacted_after_a_retried_send(
+    sessionmaker: SessionMaker,
+) -> None:
+    email_id = await queue(sessionmaker, EmailTemplate.VAISES_RECEIPT_CONSULTATION, VISITOR, {})
+    sender = RecipientEchoingSender(failures=1)
+
+    await deliver_due_emails(sessionmaker, sender, SENDER)
+    assert VISITOR in ((await stored(sessionmaker, email_id)).last_error or "")
+    async with sessionmaker() as session:  # make the retry due immediately
+        await session.execute(
+            update(OutboxEmail).values(next_attempt_at=utcnow() - timedelta(seconds=1))
+        )
+        await session.commit()
+    await deliver_due_emails(sessionmaker, sender, SENDER)
+
+    email = await stored(sessionmaker, email_id)
+    assert email.status is OutboxStatus.SENT
+    assert email.to_address == ""
+    assert email.last_error is None
 
 
 async def test_auth_email_keeps_its_recipient_after_send(sessionmaker: SessionMaker) -> None:

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import utcnow
 from app.domain_errors import HumanVerificationFailed, InvalidDate, NotFound
-from app.emails.templates import EmailTemplate
+from app.emails.templates import VAISES_RECEIPTS, EmailTemplate
 from app.integrations.human_verification import HumanVerifier
 from app.models.audit import ActorKind
 from app.models.user import Locale
@@ -204,6 +204,10 @@ class VaisesService:
         if request.anonymised_at is not None:
             return request
         admin_id = ctx.user.id
+        contact = self.reveal_contact(request)
+        if contact is not None and request.contact_kind is ContactKind.EMAIL:
+            # A receipt the worker hasn't sent yet would deliver to the erased address.
+            await self._email_queue.withdraw_pending(VAISES_RECEIPTS, contact)
         anonymise(request, utcnow())
         self._audit_request(
             AuditAction.VAISES_REQUEST_ERASED,
@@ -257,6 +261,7 @@ class VaisesService:
         """Every outcome after validation answers 202, so the response reveals nothing."""
         ip = meta.ip or UNKNOWN_IP
         contact = body.contact
+        await self._throttle.hit(Rules.VAISES_SUBMIT_ATTEMPT_IP, ip)
         await self._throttle.check(Rules.VAISES_SUBMIT_IP, ip)
         await self._throttle.check(Rules.VAISES_SUBMIT_RECIPIENT, contact.value)
         if not await self._human_verifier.verify(body.turnstile_token, meta.ip):

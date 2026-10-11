@@ -12,6 +12,8 @@ from sqlalchemy import func, select
 
 from app.dependencies import get_today
 from app.emails.templates import EmailTemplate, render_email
+from app.integrations import Integrations
+from app.main import create_app
 from app.models import OutboxEmail, User
 from app.models.auth import ThrottleEvent
 from app.models.user import Locale
@@ -26,10 +28,14 @@ from app.models.vaises import (
 from app.repositories.vaises import VaisesRepository
 from app.security.encryption import FieldEncryptor
 from app.services.throttle import Rules
+from app.settings import Settings
 from tests.conftest import (
     APP_URL,
     HUMAN_TOKEN,
     TEST_ENCRYPTION_KEY,
+    ClientFactory,
+    FakeBreachChecker,
+    FakeHumanVerifier,
     SessionMaker,
     create_superadmin,
     outbox_for,
@@ -263,6 +269,40 @@ async def test_ip_limit(client: AsyncClient) -> None:
     response = await submit(client, inquiry_body("+37061234569"))
     assert error_of(response) == (429, "RATE_LIMITED")
     assert int(response.headers["Retry-After"]) > 0
+
+
+class CountingHumanVerifier(FakeHumanVerifier):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def verify(self, token: str | None, ip: str | None) -> bool:
+        self.calls += 1
+        return await super().verify(token, ip)
+
+
+async def test_failed_attempts_are_throttled_before_turnstile(
+    client_for: ClientFactory, settings: Settings, sessionmaker: SessionMaker
+) -> None:
+    verifier = CountingHumanVerifier()
+    app = create_app(
+        settings,
+        integrations=Integrations(breach_checker=FakeBreachChecker(), human_verifier=verifier),
+    )
+    attempt_limit = Rules.VAISES_SUBMIT_ATTEMPT_IP.limit
+
+    async with client_for(app) as client:
+        for _ in range(attempt_limit):
+            response = await client.post(
+                CONSULTATION_URL, json=consultation_body(turnstile_token="bot")
+            )
+            assert error_of(response) == (400, "HUMAN_VERIFICATION_FAILED")
+        response = await client.post(
+            CONSULTATION_URL, json=consultation_body(turnstile_token="bot")
+        )
+
+    assert error_of(response) == (429, "RATE_LIMITED")
+    assert verifier.calls == attempt_limit
+    assert await stored_requests(sessionmaker) == []
 
 
 @pytest.mark.parametrize(

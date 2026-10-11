@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.clock import utcnow
 from app.db import build_engine, build_sessionmaker
-from app.emails.templates import EmailTemplate, render_email
+from app.emails.templates import VAISES_RECEIPTS, EmailTemplate, render_email
 from app.integrations.email_senders import EmailSender, build_email_sender
 from app.logging_config import configure_logging
 from app.models.email_outbox import OutboxEmail, OutboxStatus
@@ -22,11 +22,6 @@ MAX_ATTEMPTS = 8
 BASE_RETRY_DELAY = timedelta(seconds=30)
 POLL_INTERVAL_SECONDS = 2.0
 ERROR_MAX_LENGTH = 500
-# Visitor receipts go to a contact that is otherwise only stored encrypted; once delivery
-# is settled the plaintext address must not linger in the outbox.
-REDACT_RECIPIENT_AFTER_DELIVERY = frozenset(
-    {EmailTemplate.VAISES_RECEIPT_DATE, EmailTemplate.VAISES_RECEIPT_CONSULTATION}
-)
 
 
 def retry_delay(attempts: int) -> timedelta:
@@ -43,8 +38,11 @@ async def _deliver_one(email: OutboxEmail, sender: EmailSender, sender_address: 
 def _scrub_after_delivery(email: OutboxEmail) -> None:
     # One-time links must not outlive delivery in the database.
     email.payload = None
-    if email.template in REDACT_RECIPIENT_AFTER_DELIVERY:
+    # Once delivery is settled the visitor's plaintext address must not linger in the outbox,
+    # including inside provider errors, which often quote the rejected address.
+    if email.template in VAISES_RECEIPTS:
         email.to_address = ""
+        email.last_error = None
 
 
 async def deliver_due_emails(

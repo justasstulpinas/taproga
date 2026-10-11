@@ -19,7 +19,6 @@ SENSITIVE_KEYS = frozenset(
         "set-cookie",
         "secret",
         "access_code",
-        "totp",
         "email",
         "phone",
     }

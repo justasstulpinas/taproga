@@ -121,7 +121,7 @@ Vaises = Annotated[VaisesService, Depends(get_vaises_service)]
 async def get_session_context(
     request: Request, db: DbSession, settings: AppSettings
 ) -> AuthContext:
-    """Any live session, including a superadmin still pending 2FA."""
+    """Any live session, regardless of account type."""
     return await SessionService(db).authenticate(request.cookies.get(settings.session_cookie_name))
 
 

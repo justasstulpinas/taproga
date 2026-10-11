@@ -1,6 +1,7 @@
+from collections.abc import Iterable
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.email_outbox import OutboxEmail, OutboxStatus
@@ -23,3 +24,12 @@ class OutboxRepository:
             .with_for_update(skip_locked=True)
         )
         return list(result.scalars())
+
+    async def delete_pending(self, templates: Iterable[str], to_address: str) -> None:
+        await self._session.execute(
+            delete(OutboxEmail).where(
+                OutboxEmail.status == OutboxStatus.PENDING,
+                OutboxEmail.template.in_(list(templates)),
+                OutboxEmail.to_address == to_address,
+            )
+        )

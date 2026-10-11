@@ -6,7 +6,8 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models import AuditEntry
+from app.emails.templates import EmailTemplate
+from app.models import AuditEntry, OutboxEmail, OutboxStatus
 from app.models.audit import ActorKind
 from app.models.user import Locale
 from app.models.vaises import (
@@ -18,6 +19,7 @@ from app.models.vaises import (
 )
 from app.security.encryption import FieldEncryptor
 from tests.conftest import (
+    HUMAN_TOKEN,
     TEST_ENCRYPTION_KEY,
     SessionMaker,
     admin_login,
@@ -203,6 +205,43 @@ async def test_erase_removes_contact_and_audits_without_it(
     assert CONTACT not in str([entry.before, entry.after, entry.context])
 
 
+async def test_erase_withdraws_the_pending_receipt(
+    client: AsyncClient, sessionmaker: SessionMaker
+) -> None:
+    other = "petras@pavyzdys.lt"
+    for contact in (CONTACT, other):
+        body = {
+            "contact": contact,
+            "locale": "lt",
+            "idempotency_key": str(uuid.uuid4()),
+            "turnstile_token": HUMAN_TOKEN,
+        }
+        response = await client.post("/api/v1/vaises/consultation-requests", json=body)
+        assert response.status_code == 202, response.text
+    async with sessionmaker() as session:
+        query = select(VaisesRequest.public_id).order_by(VaisesRequest.id).limit(1)
+        public_id = (await session.execute(query)).scalar_one()
+        owner_before = [
+            (e.id, e.payload)
+            for e in (await session.execute(select(OutboxEmail))).scalars()
+            if e.template == EmailTemplate.VAISES_OWNER_NOTIFICATION
+        ]
+    await login_admin(client, sessionmaker)
+
+    assert (await client.post(f"{REQUESTS}/{public_id}/erase")).status_code == 200
+
+    async with sessionmaker() as session:
+        outbox = list((await session.execute(select(OutboxEmail))).scalars())
+    receipts = [e.to_address for e in outbox if e.template.startswith("vaises_receipt")]
+    assert receipts == [other]
+    owner_after = [
+        (e.id, e.payload) for e in outbox if e.template == EmailTemplate.VAISES_OWNER_NOTIFICATION
+    ]
+    assert owner_after == owner_before
+    assert len(owner_after) == 2
+    assert all(e.status is OutboxStatus.PENDING for e in outbox)
+
+
 async def test_unknown_or_soft_deleted_id_is_404(
     client: AsyncClient, sessionmaker: SessionMaker
 ) -> None:
@@ -221,6 +260,23 @@ async def test_unknown_or_soft_deleted_id_is_404(
     listed = await client.get(REQUESTS)
     assert ids(listed.json()) == []
     assert await audit_entries(sessionmaker) == []
+
+
+@pytest.mark.parametrize(
+    ("method", "action"),
+    [
+        ("GET", ""),
+        ("GET", "/{id}"),
+        ("POST", "/{id}/handled"),
+        ("POST", "/{id}/reopen"),
+        ("POST", "/{id}/erase"),
+    ],
+)
+async def test_rejects_anonymous(client: AsyncClient, method: str, action: str) -> None:
+    response = await client.request(method, REQUESTS + action.format(id=uuid.uuid4()))
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHENTICATED"
 
 
 @pytest.mark.parametrize("account_type", ["newlywed", "service"])

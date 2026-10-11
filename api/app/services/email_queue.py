@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from urllib.parse import urlencode
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,3 +38,7 @@ class EmailQueue:
         self._repository.add(
             OutboxEmail(to_address=to, template=template, locale=locale, payload=payload)
         )
+
+    async def withdraw_pending(self, templates: Iterable[EmailTemplate], to: str) -> None:
+        """Drops not-yet-sent emails in the caller's transaction."""
+        await self._repository.delete_pending(templates, to)
