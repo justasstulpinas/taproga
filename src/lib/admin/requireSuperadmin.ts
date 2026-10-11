@@ -1,11 +1,8 @@
 import type { GetServerSidePropsContext, Redirect } from "next";
+import { serverApiFetch } from "@/lib/admin/serverApi";
 
 const SUPERADMIN = "superadmin";
 const LOGIN_PATH = "/admin/login";
-
-function apiOrigin(): string {
-  return process.env.API_ORIGIN ?? "http://localhost:8000";
-}
 
 function loginRedirect(path: string): { redirect: Redirect } {
   return {
@@ -15,9 +12,7 @@ function loginRedirect(path: string): { redirect: Redirect } {
 
 async function isSuperadmin(cookie: string | undefined): Promise<boolean> {
   try {
-    const response = await fetch(`${apiOrigin()}/api/v1/auth/me`, {
-      headers: { accept: "application/json", ...(cookie ? { cookie } : {}) },
-    });
+    const response = await serverApiFetch("/auth/me", cookie);
     if (response.status !== 200) return false;
     const user = (await response.json()) as { account_type?: string };
     return user.account_type === SUPERADMIN;
