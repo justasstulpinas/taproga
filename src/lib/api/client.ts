@@ -2,6 +2,7 @@ import { ApiError } from "@/lib/api/errors";
 
 const API_PREFIX = "/api/v1";
 const UNKNOWN_CODE = "UNKNOWN";
+const NO_CONTENT = 204;
 
 type ErrorBody = { error?: { code?: string; message?: string; request_id?: string } };
 
@@ -37,5 +38,6 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       retryAfterSeconds: parseRetryAfter(response.headers.get("Retry-After")),
     });
   }
+  if (response.status === NO_CONTENT) return undefined as T;
   return (await response.json()) as T;
 }
