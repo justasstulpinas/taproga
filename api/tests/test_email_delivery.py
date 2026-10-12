@@ -108,9 +108,11 @@ VISITOR = "jonas@pavyzdys.lt"
 OWNER = "owner@vaises.lt"
 OWNER_PAYLOAD = {
     "kind_label": "Datos užklausa",
+    "service_label": "Vestuvės",
     "date_label": "2026 m. lapkričio 14 d.",
     "availability_label": "laisva",
     "contact": VISITOR,
+    "message": "",
     "admin_url": "http://localhost:3000/admin/vaises/uzklausos?id=abc",
 }
 

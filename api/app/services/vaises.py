@@ -15,6 +15,7 @@ from app.models.audit import ActorKind
 from app.models.user import Locale
 from app.models.vaises import (
     ANONYMISED_COLUMNS,
+    SERVICE_LABELS_LT,
     Availability,
     BlockedDate,
     ContactKind,
@@ -302,7 +303,7 @@ class VaisesService:
             idempotency_key=body.idempotency_key,
         )
         self._repository.add_request(request)
-        self._queue_owner_notification(request, contact)
+        self._queue_owner_notification(request, contact, message)
         if contact.kind is ContactKind.EMAIL:
             self._queue_receipt(request, contact)
         try:
@@ -319,7 +320,9 @@ class VaisesService:
         await self._throttle.record(Rules.VAISES_SUBMIT_RECIPIENT, contact.value)
         logger.info("vaises_request_submitted", extra={"request_public_id": str(request.public_id)})
 
-    def _queue_owner_notification(self, request: VaisesRequest, contact: Contact) -> None:
+    def _queue_owner_notification(
+        self, request: VaisesRequest, contact: Contact, message: str | None
+    ) -> None:
         if self._notify_email is None:
             # Settings require it in staging/production; locally the request is still stored.
             logger.warning(
@@ -333,11 +336,15 @@ class VaisesService:
             self._notify_email,
             {
                 "kind_label": KIND_LABELS_LT[request.kind],
+                "service_label": ""
+                if request.service is None
+                else SERVICE_LABELS_LT[request.service],
                 "date_label": _date_label(request.event_date),
                 "availability_label": ""
                 if availability is None
                 else AVAILABILITY_LABELS_LT[availability],
                 "contact": contact.value,
+                "message": message or "",
                 "admin_url": self._links.page(f"{ADMIN_REQUESTS_PATH}?id={request.public_id}"),
             },
         )

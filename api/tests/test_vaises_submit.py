@@ -119,13 +119,15 @@ async def test_date_inquiry_stores_and_queues_two_emails(
     assert owner.locale is Locale.LT
     assert owner.payload == {
         "kind_label": "Datos užklausa",
+        "service_label": "Vestuvės",
         "date_label": DATE_LABEL,
         "availability_label": "laisva",
         "contact": VISITOR,
+        "message": "",
         "admin_url": f"{APP_URL}/admin/vaises/uzklausos?id={request.public_id}",
     }
     rendered = render_email(EmailTemplate(owner.template), owner.locale, NOTIFY, owner.payload)
-    assert rendered.subject == f"Nauja užklausa: {DATE_LABEL}"
+    assert rendered.subject == f"Nauja užklausa · Vestuvės: {DATE_LABEL}"
 
     [receipt] = await outbox_for(sessionmaker, VISITOR)
     assert receipt.template == EmailTemplate.VAISES_RECEIPT_DATE
@@ -356,9 +358,11 @@ async def test_consultation_has_no_event_date(
     [owner] = await outbox_for(sessionmaker, NOTIFY)
     assert owner.payload == {
         "kind_label": "Konsultacijos užklausa",
+        "service_label": "",
         "date_label": "",
         "availability_label": "",
         "contact": VISITOR,
+        "message": "",
         "admin_url": f"{APP_URL}/admin/vaises/uzklausos?id={request.public_id}",
     }
     [receipt] = await outbox_for(sessionmaker, VISITOR)
@@ -439,3 +443,28 @@ async def test_consultation_rejects_message_field(client: AsyncClient) -> None:
 def test_clean_message_strips_control_and_bidi_characters() -> None:
     raw = "Labas\u202edlrow\u0007\nantra eilutė\tok"
     assert clean_message(raw) == "Labasdlrow\nantra eilutė\tok"
+
+
+async def test_owner_payload_carries_service_and_message(
+    client: AsyncClient, sessionmaker: SessionMaker
+) -> None:
+    body = inquiry_body(service="renginiai", message="Vakarienė 80 svečių.")
+    assert (await submit(client, body)).status_code == 202
+
+    [owner] = await outbox_for(sessionmaker, NOTIFY)
+    assert owner.payload is not None
+    assert owner.payload["service_label"] == "Renginiai"
+    assert owner.payload["message"] == "Vakarienė 80 svečių."
+    [receipt] = await outbox_for(sessionmaker, VISITOR)
+    assert receipt.payload == {"date_label": DATE_LABEL}
+
+
+async def test_consultation_owner_payload_has_empty_service_and_message(
+    client: AsyncClient, sessionmaker: SessionMaker
+) -> None:
+    assert (await client.post(CONSULTATION_URL, json=consultation_body())).status_code == 202
+
+    [owner] = await outbox_for(sessionmaker, NOTIFY)
+    assert owner.payload is not None
+    assert owner.payload["service_label"] == ""
+    assert owner.payload["message"] == ""

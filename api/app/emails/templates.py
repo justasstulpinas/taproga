@@ -136,27 +136,31 @@ _COPY: Mapping[EmailTemplate, Mapping[Locale, _Copy]] = {
     },
     EmailTemplate.VAISES_OWNER_NOTIFICATION: {
         Locale.LT: _Copy(
-            subject="Nauja užklausa: {date_label}",
+            subject="Nauja užklausa · {service_label}: {date_label}",
             subject_without_date="Nauja konsultacijos užklausa",
             heading="Gauta nauja užklausa",
             body=(
                 "Tipas: {kind_label}\n"
+                "Paslauga: {service_label}\n"
                 "Data: {date_label}\n"
                 "Užimtumas pateikimo metu: {availability_label}\n"
-                "Kontaktas: {contact}"
+                "Kontaktas: {contact}\n"
+                "Žinutė: {message}"
             ),
             button="Atidaryti užklausą",
             footnote="Šis laiškas išsiųstas automatiškai.",
         ),
         Locale.EN: _Copy(
-            subject="New inquiry: {date_label}",
+            subject="New inquiry · {service_label}: {date_label}",
             subject_without_date="New consultation inquiry",
             heading="New inquiry received",
             body=(
                 "Type: {kind_label}\n"
+                "Service: {service_label}\n"
                 "Date: {date_label}\n"
                 "Availability at submission: {availability_label}\n"
-                "Contact: {contact}"
+                "Contact: {contact}\n"
+                "Message: {message}"
             ),
             button="Open inquiry",
             footnote="This email was sent automatically.",
