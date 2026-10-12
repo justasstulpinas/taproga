@@ -2723,8 +2723,9 @@ button.vaises-entry-detail-cta {
   outline-offset: -0.75rem;
 }
 
+/* At the bottom of the calendar-sized slot, so each step's text sits just above its buttons. */
 .vaises-date-result {
-  align-self: center;
+  align-self: end;
   width: 100%;
   /* Stay the calendar's width; the one-line title overflows evenly on both sides instead. */
   min-width: 0;
@@ -3147,6 +3148,11 @@ button.vaises-entry-detail-cta {
 
   .vaises-date-below {
     justify-content: flex-end;
+  }
+
+  /* Past the calendar, the step's text rests on the pinned row instead of floating mid-screen. */
+  .vaises-date-group:has(.vaises-date-stage > .vaises-date-result) .vaises-date-below {
+    margin-top: 0;
   }
 
   /* 2.95rem = 44px touch targets at this site's 15px root size. */
