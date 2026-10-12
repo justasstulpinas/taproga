@@ -58,6 +58,13 @@ uv run python -m app.cli create-superadmin --email you@taproga.com
   claimed with `SELECT … FOR UPDATE SKIP LOCKED`). Dead-lettered emails log at `ERROR`.
 - Run `uv run python -m app.jobs.vaises_retention` once a day (cron or the host's scheduler). It
   runs once and exits, anonymising contact details of requests handled more than 730 days ago.
+- Email goes out through a real mailbox over SMTP (`EMAIL_BACKEND=smtp`). With Hostinger:
+  `SMTP_HOST=smtp.hostinger.com`, `SMTP_PORT=465`, `SMTP_SECURITY=ssl`, the mailbox address as
+  `SMTP_USERNAME` and `EMAIL_FROM` (e.g. `Vaises <vaises@taproga.com>`), and its password as
+  `SMTP_PASSWORD` in the server's environment only. Before launch, confirm SPF and DKIM are active
+  for the domain in Hostinger and add a DMARC record, or receipts will land in spam. Hostinger
+  plans cap daily sending; that suits Vaises, but bulk invitations later need a dedicated
+  email service (a settings change, since the sender is swappable).
 
 ## Environment variables
 

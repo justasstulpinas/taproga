@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.settings import EmailBackend, Environment
+from app.settings import SMTP_SSL_PORT, EmailBackend, Environment, SmtpSecurity
 from tests.conftest import make_settings
 
 POSTGRES_URL = "postgresql+asyncpg://user:pass@db.invalid/taproga"
@@ -47,6 +47,41 @@ def test_deployed_environments_require_https_app_url() -> None:
         make_settings(
             **_deployed(Environment.PRODUCTION, public_app_url="http://taproga.com"),
             email_backend=EmailBackend.CONSOLE,
+        )
+
+
+SMTP_VALUES: dict[str, object] = {
+    "email_backend": EmailBackend.SMTP,
+    "smtp_host": "smtp.hostinger.com",
+    "smtp_username": "vaises@taproga.com",
+    "smtp_password": "mailbox-app-password",
+}
+
+
+@pytest.mark.parametrize("missing", ["smtp_host", "smtp_username", "smtp_password"])
+def test_smtp_backend_requires_its_connection_settings(missing: str) -> None:
+    with pytest.raises(ValidationError, match=missing.upper()):
+        make_settings(**{**SMTP_VALUES, missing: None})
+
+
+def test_deployed_environment_accepts_smtp_over_ssl() -> None:
+    settings = make_settings(
+        **_deployed(Environment.PRODUCTION, vaises_notify_email="owner@taproga.com", **SMTP_VALUES)
+    )
+
+    assert settings.smtp_security is SmtpSecurity.SSL
+    assert settings.smtp_port == SMTP_SSL_PORT
+
+
+def test_deployed_environment_refuses_unencrypted_smtp() -> None:
+    with pytest.raises(ValidationError, match="SMTP_SECURITY"):
+        make_settings(
+            **_deployed(
+                Environment.PRODUCTION,
+                vaises_notify_email="owner@taproga.com",
+                smtp_security=SmtpSecurity.NONE,
+                **SMTP_VALUES,
+            )
         )
 
 

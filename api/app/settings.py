@@ -19,11 +19,20 @@ class Environment(StrEnum):
 class EmailBackend(StrEnum):
     CONSOLE = "console"  # local: prints emails to stdout
     MEMORY = "memory"  # tests: captured in-process
+    SMTP = "smtp"  # a real mailbox, e.g. Hostinger's smtp.hostinger.com
 
 
-# Backends that actually deliver mail. Empty until a provider is chosen, which deliberately
-# blocks staging/production from booting with a fake sender.
-DELIVERING_EMAIL_BACKENDS: frozenset[EmailBackend] = frozenset()
+# Backends that actually deliver mail; staging/production refuse to boot with any other.
+DELIVERING_EMAIL_BACKENDS: frozenset[EmailBackend] = frozenset({EmailBackend.SMTP})
+
+
+class SmtpSecurity(StrEnum):
+    SSL = "ssl"  # implicit TLS from the first byte (port 465)
+    STARTTLS = "starttls"  # plain connection upgraded to TLS (port 587)
+    NONE = "none"  # unencrypted: tests and local fakes only, refused when deployed
+
+
+SMTP_SSL_PORT = 465
 
 
 class Settings(BaseSettings):
@@ -44,6 +53,12 @@ class Settings(BaseSettings):
     breach_check_enabled: bool = True
     email_backend: EmailBackend = EmailBackend.CONSOLE
     email_from: str = "Ta Proga <no-reply@taproga.com>"
+    # Used when EMAIL_BACKEND=smtp. The password is the mailbox's own (or an app password).
+    smtp_host: str | None = None
+    smtp_port: int = SMTP_SSL_PORT
+    smtp_security: SmtpSecurity = SmtpSecurity.SSL
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
     # Inbox that receives every Vaises date inquiry and consultation request.
     vaises_notify_email: EmailStr | None = None
 
@@ -63,6 +78,19 @@ class Settings(BaseSettings):
     def session_cookie_name(self) -> str:
         # __Host- prefix makes browsers enforce Secure, Path=/ and no Domain attribute.
         return "__Host-tp_session" if self.cookie_secure else "tp_session"
+
+    @model_validator(mode="after")
+    def _validate_smtp_settings(self) -> Self:
+        if self.email_backend is not EmailBackend.SMTP:
+            return self
+        for name in ("smtp_host", "smtp_username", "smtp_password"):
+            if getattr(self, name) is None:
+                raise ValueError(f"EMAIL_BACKEND=smtp requires {name.upper()}")
+        if self.is_deployed and self.smtp_security is SmtpSecurity.NONE:
+            raise ValueError(
+                f"{self.environment} requires an encrypted SMTP_SECURITY (ssl or starttls)"
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_deployed_requirements(self) -> Self:
