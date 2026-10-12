@@ -182,6 +182,7 @@ async def test_unblock_keeps_existing_requests_reserved(
         "idempotency_key": str(uuid.uuid4()),
         "turnstile_token": HUMAN_TOKEN,
         "date": DAY,
+        "service": "vestuves",
     }
     assert (await client.post(DATE_INQUIRIES, json=inquiry)).status_code == 202
 

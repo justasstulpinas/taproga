@@ -20,6 +20,7 @@ from app.models.vaises import (
     ContactKind,
     RequestKind,
     RequestStatus,
+    Service,
     VaisesRequest,
 )
 from app.pagination import Page, PageRequest
@@ -90,7 +91,14 @@ class VaisesService:
 
     async def submit_date_inquiry(self, body: DateInquiryIn, meta: RequestMeta) -> None:
         ensure_bookable(body.date, self._today())
-        await self._submit(RequestKind.DATE_INQUIRY, body, body.date, meta)
+        await self._submit(
+            RequestKind.DATE_INQUIRY,
+            body,
+            body.date,
+            meta,
+            service=body.service,
+            message=body.message,
+        )
 
     async def submit_consultation(self, body: ConsultationIn, meta: RequestMeta) -> None:
         await self._submit(RequestKind.CONSULTATION, body, None, meta)
@@ -153,6 +161,11 @@ class VaisesService:
         if request.contact_encrypted is None:
             return None
         return self._encryptor.decrypt(request.contact_encrypted)
+
+    def reveal_message(self, request: VaisesRequest) -> str | None:
+        if request.message_encrypted is None:
+            return None
+        return self._encryptor.decrypt(request.message_encrypted)
 
     async def mark_handled(
         self, ctx: AuthContext, public_id: uuid.UUID, meta: RequestMeta
@@ -257,6 +270,9 @@ class VaisesService:
         body: ConsultationIn,
         event_date: date | None,
         meta: RequestMeta,
+        *,
+        service: Service | None = None,
+        message: str | None = None,
     ) -> None:
         """Every outcome after validation answers 202, so the response reveals nothing."""
         ip = meta.ip or UNKNOWN_IP
@@ -274,12 +290,14 @@ class VaisesService:
             public_id=uuid.uuid4(),
             kind=kind,
             event_date=event_date,
+            service=service,
             availability_at_submit=(
                 None if event_date is None else await self._availability_on(event_date)
             ),
             contact_kind=contact.kind,
             contact_encrypted=self._encryptor.encrypt(contact.value),
             contact_hash=self._hasher.hash(SubjectKind.CONTACT, contact.value),
+            message_encrypted=None if message is None else self._encryptor.encrypt(message),
             locale=body.locale,
             idempotency_key=body.idempotency_key,
         )

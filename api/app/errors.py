@@ -30,6 +30,7 @@ _STATUS_BY_DOMAIN_CODE = {
     ErrorCode.HUMAN_VERIFICATION_FAILED: 400,
     ErrorCode.INVALID_DATE: 422,
     ErrorCode.INVALID_CONTACT: 422,
+    ErrorCode.MESSAGE_TOO_LONG: 422,
     ErrorCode.RATE_LIMITED: 429,
 }
 
@@ -38,6 +39,7 @@ _STATUS_BY_DOMAIN_CODE = {
 _CODE_BY_VALIDATION_TYPE = {
     "invalid_date": ErrorCode.INVALID_DATE,
     "invalid_contact": ErrorCode.INVALID_CONTACT,
+    "message_too_long": ErrorCode.MESSAGE_TOO_LONG,
 }
 
 

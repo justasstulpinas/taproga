@@ -23,9 +23,11 @@ from app.models.vaises import (
     ContactKind,
     RequestKind,
     RequestStatus,
+    Service,
     VaisesRequest,
 )
 from app.repositories.vaises import VaisesRepository
+from app.schemas.vaises import clean_message
 from app.security.encryption import FieldEncryptor
 from app.services.throttle import Rules
 from app.settings import Settings
@@ -71,7 +73,7 @@ def consultation_body(contact: str = VISITOR, **overrides: Any) -> dict[str, Any
 
 
 def inquiry_body(contact: str = VISITOR, **overrides: Any) -> dict[str, Any]:
-    return consultation_body(contact, **{"date": EVENT_DAY, **overrides})
+    return consultation_body(contact, **{"date": EVENT_DAY, "service": "vestuves", **overrides})
 
 
 async def submit(client: AsyncClient, body: dict[str, Any]) -> Response:
@@ -368,3 +370,72 @@ async def test_consultation_rejects_a_date(client: AsyncClient, sessionmaker: Se
     response = await client.post(CONSULTATION_URL, json=consultation_body(date=EVENT_DAY))
     assert error_of(response) == (422, "VALIDATION_ERROR")
     assert await stored_requests(sessionmaker) == []
+
+
+def without(body: dict[str, Any], key: str) -> dict[str, Any]:
+    return {name: value for name, value in body.items() if name != key}
+
+
+async def test_service_is_required(client: AsyncClient, sessionmaker: SessionMaker) -> None:
+    response = await submit(client, without(inquiry_body(), "service"))
+    assert error_of(response) == (422, "VALIDATION_ERROR")
+    assert await stored_requests(sessionmaker) == []
+
+
+async def test_unknown_service_rejected(client: AsyncClient, sessionmaker: SessionMaker) -> None:
+    response = await submit(client, inquiry_body(service="misija"))
+    assert error_of(response) == (422, "VALIDATION_ERROR")
+    assert await stored_requests(sessionmaker) == []
+
+
+async def test_message_is_trimmed_and_encrypted(
+    client: AsyncClient, sessionmaker: SessionMaker, caplog: pytest.LogCaptureFixture
+) -> None:
+    message = "Mums reikia vakarienės 80 svečių."
+    with caplog.at_level(logging.INFO):
+        response = await submit(client, inquiry_body(service="renginiai", message=f"  {message}  "))
+    assert response.status_code == 202, response.text
+
+    [request] = await stored_requests(sessionmaker)
+    assert request.service is Service.RENGINIAI
+    assert request.message_encrypted is not None
+    assert request.message_encrypted != message
+    assert FieldEncryptor(TEST_ENCRYPTION_KEY).decrypt(request.message_encrypted) == message
+    for record in caplog.records:
+        assert message not in record.getMessage()
+        assert message not in str(record.__dict__)
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\n\t "])
+async def test_blank_message_stored_as_null(
+    client: AsyncClient, sessionmaker: SessionMaker, blank: str
+) -> None:
+    assert (await submit(client, inquiry_body(message=blank))).status_code == 202
+    [request] = await stored_requests(sessionmaker)
+    assert request.message_encrypted is None
+
+
+async def test_fifty_words_with_lithuanian_and_emoji_accepted(client: AsyncClient) -> None:
+    message = " ".join(["žodis"] * 48 + ["Ačiū", "🎉"])
+    assert (await submit(client, inquiry_body(message=message))).status_code == 202
+
+
+async def test_fifty_one_words_rejected(client: AsyncClient, sessionmaker: SessionMaker) -> None:
+    response = await submit(client, inquiry_body(message=" ".join(["žodis"] * 51)))
+    assert error_of(response) == (422, "MESSAGE_TOO_LONG")
+    assert await stored_requests(sessionmaker) == []
+
+
+async def test_single_601_char_word_rejected(client: AsyncClient) -> None:
+    response = await submit(client, inquiry_body(message="a" * 601))
+    assert error_of(response) == (422, "MESSAGE_TOO_LONG")
+
+
+async def test_consultation_rejects_message_field(client: AsyncClient) -> None:
+    response = await client.post(CONSULTATION_URL, json=consultation_body(message="Labas"))
+    assert error_of(response) == (422, "VALIDATION_ERROR")
+
+
+def test_clean_message_strips_control_and_bidi_characters() -> None:
+    raw = "Labas\u202edlrow\u0007\nantra eilutė\tok"
+    assert clean_message(raw) == "Labasdlrow\nantra eilutė\tok"

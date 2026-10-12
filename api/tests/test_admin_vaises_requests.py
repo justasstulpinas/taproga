@@ -15,6 +15,7 @@ from app.models.vaises import (
     ContactKind,
     RequestKind,
     RequestStatus,
+    Service,
     VaisesRequest,
 )
 from app.security.encryption import FieldEncryptor
@@ -30,6 +31,7 @@ from tests.conftest import (
 
 REQUESTS = "/api/v1/admin/vaises/requests"
 CONTACT = "jonas@pavyzdys.lt"
+MESSAGE = "Vakarienė 80 svečių.\nSu desertu."
 BASE_TIME = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 EVENT_DAY = date(2026, 11, 14)
 
@@ -43,10 +45,14 @@ async def seed_request(
             public_id=uuid.uuid4(),
             kind=kind,
             event_date=EVENT_DAY if is_inquiry else None,
+            service=Service.RENGINIAI if is_inquiry else None,
             availability_at_submit=Availability.AVAILABLE if is_inquiry else None,
             contact_kind=ContactKind.EMAIL,
             contact_encrypted=FieldEncryptor(TEST_ENCRYPTION_KEY).encrypt(CONTACT),
             contact_hash="a" * 64,
+            message_encrypted=(
+                FieldEncryptor(TEST_ENCRYPTION_KEY).encrypt(MESSAGE) if is_inquiry else None
+            ),
             locale=Locale.LT,
             idempotency_key=uuid.uuid4(),
             created_at=BASE_TIME + timedelta(minutes=minutes),
@@ -109,6 +115,23 @@ async def test_item_shape_and_decrypted_contact(
     assert body["status"] == "new"
     assert body["handled_at"] is None
     assert body["anonymised_at"] is None
+    assert body["service"] == "renginiai"
+    assert body["message"] == MESSAGE
+
+
+async def test_list_includes_service_and_message(
+    client: AsyncClient, sessionmaker: SessionMaker
+) -> None:
+    await seed_request(sessionmaker, minutes=0, kind=RequestKind.CONSULTATION)
+    await seed_request(sessionmaker, minutes=1)
+    await login_admin(client, sessionmaker)
+
+    items = (await client.get(REQUESTS)).json()["items"]
+
+    assert [(item["service"], item["message"]) for item in items] == [
+        ("renginiai", MESSAGE),
+        (None, None),
+    ]
 
 
 async def test_limit_default_and_max(client: AsyncClient, sessionmaker: SessionMaker) -> None:
@@ -189,6 +212,8 @@ async def test_erase_removes_contact_and_audits_without_it(
     assert response.status_code == again.status_code == 200
     assert response.json()["contact"] is None
     assert response.json()["contact_kind"] is None
+    assert response.json()["message"] is None
+    assert response.json()["service"] == "renginiai"
     assert response.json()["anonymised_at"] is not None
     assert again.json() == response.json()
     fetched = await client.get(f"{REQUESTS}/{public_id}")
@@ -197,12 +222,14 @@ async def test_erase_removes_contact_and_audits_without_it(
         row = (await session.execute(select(VaisesRequest))).scalar_one()
     assert row.contact_encrypted is None
     assert row.contact_hash is None
+    assert row.message_encrypted is None
     (entry,) = await audit_entries(sessionmaker)
     assert entry.action == "vaises.request_erased"
     assert entry.target_public_id == public_id
     assert entry.before == {"anonymised": False}
     assert entry.after == {"anonymised": True}
     assert CONTACT not in str([entry.before, entry.after, entry.context])
+    assert MESSAGE not in str([entry.before, entry.after, entry.context])
 
 
 async def test_erase_withdraws_the_pending_receipt(

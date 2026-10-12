@@ -48,6 +48,8 @@ def _request_out(service: VaisesService, request: VaisesRequest) -> VaisesReques
         kind=request.kind,
         event_date=request.event_date,
         event_date_label=None if request.event_date is None else format_date_lt(request.event_date),
+        service=request.service,
+        message=service.reveal_message(request),
         availability_at_submit=request.availability_at_submit,
         contact_kind=request.contact_kind,
         contact=service.reveal_contact(request),

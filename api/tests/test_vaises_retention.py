@@ -13,7 +13,7 @@ from app.models import (
     VaisesRequest,
 )
 from app.models.audit import ActorKind
-from app.models.vaises import ANONYMISED_COLUMNS
+from app.models.vaises import ANONYMISED_COLUMNS, Service
 from app.services.audit import AuditAction
 from app.services.vaises import anonymise
 from tests.conftest import SessionMaker
@@ -25,8 +25,10 @@ def make_request(status: RequestStatus, handled_ago: timedelta | None) -> Vaises
     return VaisesRequest(
         kind=RequestKind.DATE_INQUIRY,
         event_date=date(2027, 6, 12),
+        service=Service.VESTUVES,
         contact_kind=ContactKind.EMAIL,
         contact_encrypted="ciphertext",
+        message_encrypted="message ciphertext",
         contact_hash="a" * 64,
         locale=Locale.LT,
         idempotency_key=uuid.uuid4(),
