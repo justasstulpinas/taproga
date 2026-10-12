@@ -300,11 +300,13 @@ export default function DateInquiryPanel({
                 )}
 
                 {send === "sent" && sentTo ? (
-                  <p className="vaises-date-result-text">
-                    {/* The date already ends in "d.", so it never sits before a full stop. */}
-                    Ačiū! Gavome jūsų užklausą. Dėl {formatLongDateLt(selectedDate)}{" "}
-                    susisieksime su jumis {describeContactLt(sentTo)}.
-                  </p>
+                  <>
+                    {/* The date is already shown above; the contact sits apart so a typo is easy to spot. */}
+                    <p className="vaises-date-result-text">Ačiū! Gavome jūsų užklausą.</p>
+                    <p className="vaises-date-sent-contact">
+                      Susisieksime {describeContactLt(sentTo)}
+                    </p>
+                  </>
                 ) : (
                   <form
                     id={formId}

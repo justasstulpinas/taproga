@@ -90,9 +90,10 @@ export default function ConsultationPanel({ id, isOpen, onClose }: ConsultationP
           </p>
 
           {send === "sent" && sentTo ? (
-            <p className="vaises-date-result-text">
-              Ačiū! Susisieksime su jumis {describeContactLt(sentTo)}.
-            </p>
+            <>
+              <p className="vaises-date-result-text">Ačiū! Gavome jūsų užklausą.</p>
+              <p className="vaises-date-sent-contact">Susisieksime {describeContactLt(sentTo)}</p>
+            </>
           ) : (
             <form id={formId} className="vaises-date-form" noValidate onSubmit={handleSend}>
               <label htmlFor={contactId} className="vaises-date-label">

@@ -2806,6 +2806,21 @@ button.vaises-entry-detail-cta {
   color: var(--vaises-text);
 }
 
+/* Where the reply will go: secondary to the thank-you, tucked under it; long addresses
+   wrap instead of widening the panel. */
+.vaises-date-result-text + .vaises-date-sent-contact {
+  margin-top: -0.6rem;
+}
+
+.vaises-date-sent-contact {
+  margin: 0;
+  font-family: var(--vaises-font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--vaises-text-muted);
+  overflow-wrap: anywhere;
+}
+
 .vaises-date-form {
   width: 100%;
   display: flex;
