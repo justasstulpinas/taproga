@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import text
+from sqlalchemy import Connection, inspect, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.models import Base
 from app.settings import get_settings
 from tests.conftest import TEST_DATABASE_URL, TEST_ENCRYPTION_KEY
 
@@ -38,6 +39,35 @@ def test_migrations_match_models_and_are_reversible(alembic_config: Config) -> N
     command.check(alembic_config)
     command.downgrade(alembic_config, "base")
     command.upgrade(alembic_config, "head")
+
+
+def _check_names(connection: Connection) -> dict[str, set[str]]:
+    inspector = inspect(connection)
+    return {
+        table: {str(check["name"]) for check in inspector.get_check_constraints(table)}
+        for table in Base.metadata.tables
+    }
+
+
+async def _check_names_at(url: str, *, create_from_models: bool) -> dict[str, set[str]]:
+    engine = create_async_engine(url)
+    try:
+        async with engine.begin() as connection:
+            if create_from_models:
+                await connection.run_sync(Base.metadata.create_all)
+            return await connection.run_sync(_check_names)
+    finally:
+        await engine.dispose()
+
+
+def test_migrated_check_constraints_match_models(alembic_config: Config, tmp_path: Path) -> None:
+    # command.check (autogenerate) does not compare CHECK constraints, so drift is caught here.
+    command.upgrade(alembic_config, "head")
+    migrated = asyncio.run(_check_names_at(get_settings().database_url, create_from_models=False))
+    modelled = asyncio.run(
+        _check_names_at(f"sqlite+aiosqlite:///{tmp_path / 'models.db'}", create_from_models=True)
+    )
+    assert migrated == modelled
 
 
 @pytest.mark.skipif(
