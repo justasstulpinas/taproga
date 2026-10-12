@@ -26,6 +26,10 @@
   - trimmed, with empty stored as null;
   - at most 50 words, counted as runs of non-whitespace (`\S+`, Unicode), and at most 600 characters;
   - a violation returns 422 `MESSAGE_TOO_LONG`.
+- **Message hardening:**
+  - Before counting and storing, remove control characters (Unicode category `Cc`) except `\n` and `\t`.
+  - Also remove bidi controls U+202A–U+202E and U+2066–U+2069.
+  - Visitor text is never rendered with `dangerouslySetInnerHTML`, and the message never goes into email headers or the subject.
 - **Message privacy:** stored encrypted (`message_encrypted`, `FieldEncryptor`). It is never logged and never put in audit `before`/`after`, and it is cleared by erase and retention (it joins `ANONYMISED_COLUMNS`).
 - **Migration** `0004`, `down_revision = "0003"`, reversible, with frozen enum tuples and no app imports. Existing `date_inquiry` rows get `service = 'vestuves'`.
 - **CHECK constraint:** `service` is not null when `kind = 'date_inquiry'` and null when `kind = 'consultation'`.
@@ -115,6 +119,8 @@ async def test_fifty_words_with_lithuanian_and_emoji_accepted(client): ...      
 async def test_fifty_one_words_rejected(client): ...      # 422 MESSAGE_TOO_LONG, no row written
 async def test_single_601_char_word_rejected(client): ... # Review Focus 3: "a" * 601 -> 422 MESSAGE_TOO_LONG
 async def test_consultation_rejects_message_field(client): ...  # 422 VALIDATION_ERROR
+def test_clean_message_strips_control_and_bidi_characters():
+    assert clean_message("Labas‮dlrow\u0007\nantra eilutė\tok") == "Labasdlrow\nantra eilutė\tok"
 ```
 
 In `test_admin_vaises_requests.py`: the list and the single GET include `service` and the decrypted `message`, and a consultation has `service: null` and `message: null`. Erase sets `message` to null.
@@ -232,6 +238,7 @@ In `dateInquiry.test.ts`: `countWords("  Ačiū 🎉  labai\nlaukiame ")` return
   - A consultation still shows "Konsultacija" with no message.
   - An erased request shows no message.
   - A message with a newline keeps the line break (check `textContent` and the class).
+  - **Attack string:** a message of `<script>alert(1)</script><img src=x onerror=alert(1)>` appears literally as text, and `container.querySelector("script, img")` is `null`.
 - [ ] **Step 2: Run** `npm test`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `npm test` and `npx tsc --noEmit -p .`. Expected: green.
