@@ -150,6 +150,47 @@ test("changing the date keeps the typed message", async () => {
   expect((screen.getByLabelText(MESSAGE_LABEL) as HTMLTextAreaElement).value).toBe(MESSAGE);
 });
 
+test("a paste over 600 characters is kept whole and flagged instead of cut off", async () => {
+  const user = userEvent.setup();
+  await openResultStep(user);
+  await user.click(screen.getByRole("button", { name: "Toliau" }));
+  const message = screen.getByLabelText(MESSAGE_LABEL) as HTMLTextAreaElement;
+  await user.click(message);
+  await user.paste("a".repeat(601));
+
+  expect(message.value).toHaveLength(601);
+  expect(screen.getByText("Ne daugiau kaip 600 simbolių.")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Toliau" }).hasAttribute("disabled")).toBe(true);
+});
+
+test("returning to the result step with Atgal shows it at once, without the slow first reveal", async () => {
+  const user = userEvent.setup();
+  await openResultStep(user);
+  expect(screen.getByRole("button", { name: "Toliau" }).className).toContain(
+    "vaises-date-primary-delayed",
+  );
+  await user.click(screen.getByRole("button", { name: "Toliau" }));
+  await user.click(screen.getByRole("button", { name: "Atgal" }));
+
+  expect(screen.getByRole("button", { name: "Toliau" }).className).not.toContain(
+    "vaises-date-primary-delayed",
+  );
+  expect(screen.getByText("Jūsų data laisva").parentElement?.className).toContain(
+    "vaises-date-step",
+  );
+});
+
+test("the result and thank-you steps take focus", async () => {
+  const user = userEvent.setup();
+  await openResultStep(user);
+  expect(document.activeElement?.textContent).toBe("Jūsų data laisva");
+
+  const input = await continueToContact(user);
+  await user.type(input, CONTACT);
+  await user.click(screen.getByRole("button", { name: "Siųsti užklausą" }));
+  expect(document.activeElement?.textContent).toBe("Ačiū! Gavome jūsų užklausą.");
+});
+
 test("Keisti datą moves focus to the month heading once the calendar is interactive again", async () => {
   // Browsers ignore focus() inside an inert subtree; jsdom doesn't, so mirror that here.
   const focus = HTMLElement.prototype.focus;

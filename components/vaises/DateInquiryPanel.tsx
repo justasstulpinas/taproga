@@ -82,6 +82,8 @@ export default function DateInquiryPanel({
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [check, setCheck] = useState<CheckState>({ status: "idle" });
   const [step, setStep] = useState<Step>("date");
+  // The slow staged reveal is for the answer to a check, not for coming back to it with Atgal.
+  const [revealAnswer, setRevealAnswer] = useState(false);
   const [message, setMessage] = useState("");
   const [contact, setContact] = useState("");
   const [contactInvalid, setContactInvalid] = useState(false);
@@ -91,7 +93,10 @@ export default function DateInquiryPanel({
 
   const calendarHidden = step !== "date" || check.status === "checking";
   const messageWords = countWords(message);
-  const messageTooLong = messageWords > MESSAGE_MAX_WORDS;
+  const messageTooManyWords = messageWords > MESSAGE_MAX_WORDS;
+  // Counted in code points like the API; maxLength would silently cut a long paste instead.
+  const messageTooManyChars = [...message.trim()].length > MESSAGE_MAX_CHARS;
+  const messageTooLong = messageTooManyWords || messageTooManyChars;
   const isReserved =
     check.status === "result" && check.availability === "reserved";
 
@@ -167,6 +172,7 @@ export default function DateInquiryPanel({
         MIN_CHECK_DISPLAY_MS,
       );
       setCheck({ status: "result", availability });
+      setRevealAnswer(true);
       goTo("result");
     } catch {
       setCheck({ status: "error" });
@@ -328,7 +334,13 @@ export default function DateInquiryPanel({
             )}
 
             {(step === "result" || step === "sent") && selectedDate && (
-              <div key={step} className="vaises-date-result vaises-date-layer" role="status">
+              <div
+                key={step}
+                className={`vaises-date-result vaises-date-layer ${
+                  step === "result" && revealAnswer ? "" : "vaises-date-step"
+                }`}
+                role="status"
+              >
                 <p ref={resultTitleRef} tabIndex={-1} className="vaises-date-result-title">
                   {isReserved ? "Data jau rezervuota" : "Jūsų data laisva"}
                 </p>
@@ -371,7 +383,6 @@ export default function DateInquiryPanel({
                     className="vaises-date-input vaises-date-textarea"
                     value={message}
                     rows={4}
-                    maxLength={MESSAGE_MAX_CHARS}
                     aria-invalid={messageTooLong}
                     aria-describedby={messageHintId}
                     onChange={(event) => setMessage(event.target.value)}
@@ -386,11 +397,20 @@ export default function DateInquiryPanel({
                   </p>
                   {messageTooLong && (
                     <p className="vaises-date-error" role="alert">
-                      Ne daugiau kaip {MESSAGE_MAX_WORDS} žodžių.
+                      {messageTooManyWords
+                        ? `Ne daugiau kaip ${MESSAGE_MAX_WORDS} žodžių.`
+                        : `Ne daugiau kaip ${MESSAGE_MAX_CHARS} simbolių.`}
                     </p>
                   )}
                 </div>
-                <button type="button" className="vaises-date-link" onClick={() => goTo("result")}>
+                <button
+                  type="button"
+                  className="vaises-date-link"
+                  onClick={() => {
+                    setRevealAnswer(false);
+                    goTo("result");
+                  }}
+                >
                   Atgal
                 </button>
               </div>
@@ -466,7 +486,9 @@ export default function DateInquiryPanel({
               {step === "result" && (
                 <button
                   type="button"
-                  className="vaises-date-primary vaises-date-primary-delayed"
+                  className={`vaises-date-primary ${
+                    revealAnswer ? "vaises-date-primary-delayed" : ""
+                  }`}
                   onClick={() => goTo("message")}
                 >
                   Toliau
