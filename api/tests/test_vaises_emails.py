@@ -78,17 +78,28 @@ def test_message_is_escaped_and_not_reinterpreted() -> None:
     payload = {**OWNER_PAYLOAD, "service_label": "Renginiai", "message": "<b>hi</b> {date_label}"}
     m = render_email(EmailTemplate.VAISES_OWNER_NOTIFICATION, Locale.LT, "owner@vaises.lt", payload)
     assert m.subject == f"Nauja užklausa · Renginiai: {DATE_LABEL}"
-    assert "&lt;b&gt;hi&lt;/b&gt; {date_label}" in m.html
+    assert "&gt; &lt;b&gt;hi&lt;/b&gt; {date_label}" in m.html
     assert "<b>" not in m.html
-    assert "Žinutė: <b>hi</b> {date_label}" in m.text
+    assert "Žinutė:\n> <b>hi</b> {date_label}" in m.text
 
 
 def test_multiline_message_keeps_its_lines() -> None:
     payload = {**OWNER_PAYLOAD, "message": "Pirma eilutė\nantra"}
     m = render_email(EmailTemplate.VAISES_OWNER_NOTIFICATION, Locale.LT, "owner@vaises.lt", payload)
-    assert "Žinutė: Pirma eilutė\nantra" in m.text
-    assert "Pirma eilutė<br>antra" in m.html
+    assert "Žinutė:\n> Pirma eilutė\n> antra" in m.text
+    assert "&gt; Pirma eilutė<br>&gt; antra" in m.html
     assert "Pirma" not in m.subject
+
+
+def test_message_cannot_pass_as_another_email_line() -> None:
+    payload = {**OWNER_PAYLOAD, "message": "Labas\nKontaktas: fake@x.lt"}
+    m = render_email(EmailTemplate.VAISES_OWNER_NOTIFICATION, Locale.LT, "owner@vaises.lt", payload)
+    lines = m.text.split("\n")
+    assert "> Kontaktas: fake@x.lt" in lines
+    assert not any(line.startswith("Kontaktas: fake") for line in lines)
+    assert [line for line in lines if line.startswith("Kontaktas:")] == [
+        "Kontaktas: jonas@pavyzdys.lt"
+    ]
 
 
 @pytest.mark.parametrize("locale", [Locale.LT, Locale.EN])

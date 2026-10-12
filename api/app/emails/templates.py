@@ -45,6 +45,22 @@ _BUTTON_LINK_KEY = {
     EmailTemplate.VAISES_OWNER_NOTIFICATION: "admin_url",
 }
 _SECONDARY_LINK_KEY = {EmailTemplate.ACCOUNT_EXISTS: "forgot_url"}
+# Visitor free text, set below its label with every line quoted, so a typed line such as
+# "Kontaktas: …" can't pass for one of the email's own lines.
+_QUOTED_KEYS = frozenset({"message"})
+QUOTE_PREFIX = "> "
+
+
+def _quote(text: str) -> str:
+    return "".join(f"\n{QUOTE_PREFIX}{line}" for line in text.split("\n"))
+
+
+def _with_quotes(payload: Mapping[str, str]) -> dict[str, str]:
+    return {
+        key: _quote(value) if key in _QUOTED_KEYS and value else value
+        for key, value in payload.items()
+    }
+
 
 _COPY: Mapping[EmailTemplate, Mapping[Locale, _Copy]] = {
     EmailTemplate.VERIFY_EMAIL: {
@@ -209,7 +225,9 @@ def _fill(template: str, values: Mapping[str, str]) -> str:
         for line in lines
         if len(lines) == 1 or all(values[name] for _, name, _, _ in Formatter().parse(line) if name)
     ]
-    return "\n".join(line.format_map(values) for line in kept)
+    filled = "\n".join(line.format_map(values) for line in kept)
+    # A quoted value starts on its own line, which would leave "Label: " with a trailing space.
+    return "\n".join(line.rstrip() for line in filled.split("\n"))
 
 
 def _render_html(copy: _Copy, button_url: str | None, secondary_url: str | None) -> str:
@@ -263,7 +281,9 @@ def render_email(
         if template_copy.subject_without_date and not payload.get("date_label")
         else _fill(template_copy.subject, payload)
     )
-    copy = replace(template_copy, subject=subject, body=_fill(template_copy.body, payload))
+    copy = replace(
+        template_copy, subject=subject, body=_fill(template_copy.body, _with_quotes(payload))
+    )
     button_key = _BUTTON_LINK_KEY.get(template)
     button_url = payload[button_key] if button_key else None
     secondary_key = _SECONDARY_LINK_KEY.get(template)
