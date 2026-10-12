@@ -1,5 +1,6 @@
 import datetime as dt
 import uuid
+from collections.abc import Mapping
 from enum import StrEnum
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, Text
@@ -13,6 +14,19 @@ from app.models.user import Locale
 class RequestKind(StrEnum):
     DATE_INQUIRY = "date_inquiry"
     CONSULTATION = "consultation"
+
+
+class Service(StrEnum):
+    UZKANDZIAI = "uzkandziai"
+    RENGINIAI = "renginiai"
+    VESTUVES = "vestuves"
+
+
+SERVICE_LABELS_LT: Mapping[Service, str] = {
+    Service.UZKANDZIAI: "Užkandžiai",
+    Service.RENGINIAI: "Renginiai",
+    Service.VESTUVES: "Vestuvės",
+}
 
 
 class Availability(StrEnum):
@@ -40,8 +54,8 @@ class BlockedDate(PublicIdMixin, TimestampMixin, Base):
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
 
 
-# Contact fields erased by anonymisation; shared by the single-row and bulk retention paths.
-ANONYMISED_COLUMNS = ("contact_kind", "contact_encrypted", "contact_hash")
+# Personal fields erased by anonymisation; shared by the single-row and bulk retention paths.
+ANONYMISED_COLUMNS = ("contact_kind", "contact_encrypted", "contact_hash", "message_encrypted")
 
 
 class VaisesRequest(PublicIdMixin, TimestampMixin, Base):
@@ -54,12 +68,19 @@ class VaisesRequest(PublicIdMixin, TimestampMixin, Base):
             " OR (kind = 'consultation' AND event_date IS NULL)",
             name="event_date_matches_kind",
         ),
+        CheckConstraint(
+            "(kind = 'date_inquiry' AND service IS NOT NULL)"
+            " OR (kind = 'consultation' AND service IS NULL)",
+            name="service_matches_kind",
+        ),
         Index("ix_vaises_requests_created_at", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     kind: Mapped[RequestKind] = mapped_column(enum_column(RequestKind, "request_kind"))
     event_date: Mapped[dt.date | None]
+    # Null for consultations; one shared calendar serves every service.
+    service: Mapped[Service | None] = mapped_column(enum_column(Service, "service"), index=True)
     # Computed server-side at submit time; null for consultations.
     availability_at_submit: Mapped[Availability | None] = mapped_column(
         enum_column(Availability, "availability")
@@ -70,6 +91,8 @@ class VaisesRequest(PublicIdMixin, TimestampMixin, Base):
     contact_encrypted: Mapped[str | None] = mapped_column(Text)
     # Keyed HMAC of the normalised contact, for per-recipient throttling.
     contact_hash: Mapped[str | None] = mapped_column(String(SHA256_HEX_LENGTH), index=True)
+    # Free text that often carries names or phone numbers, so it is encrypted like the contact.
+    message_encrypted: Mapped[str | None] = mapped_column(Text)
     locale: Mapped[Locale] = mapped_column(enum_column(Locale, "locale"))
     idempotency_key: Mapped[uuid.UUID] = mapped_column(unique=True)
     status: Mapped[RequestStatus] = mapped_column(

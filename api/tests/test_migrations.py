@@ -63,3 +63,35 @@ def test_audit_log_is_append_only_in_postgres(alembic_config: Config) -> None:
 
     with pytest.raises(DBAPIError, match="append-only"):
         asyncio.run(attempt_update())
+
+
+def test_0004_backfills_existing_date_inquiries_as_vestuves(alembic_config: Config) -> None:
+    command.upgrade(alembic_config, "0003")
+
+    async def run(statement: str) -> list[tuple[object, ...]]:
+        engine = create_async_engine(get_settings().database_url)
+        try:
+            async with engine.begin() as connection:
+                result = await connection.execute(text(statement))
+                return [tuple(row) for row in result] if result.returns_rows else []
+        finally:
+            await engine.dispose()
+
+    asyncio.run(
+        run(
+            "INSERT INTO vaises_requests (public_id, kind, event_date, locale,"
+            " idempotency_key, status, created_at, updated_at) VALUES "
+            "('11111111-1111-4111-8111-111111111111', 'date_inquiry', '2027-06-12', 'lt',"
+            " 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'new', '2026-10-01', '2026-10-01'),"
+            "('22222222-2222-4222-8222-222222222222', 'consultation', NULL, 'lt',"
+            " 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'new', '2026-10-01', '2026-10-01')"
+        )
+    )
+
+    command.upgrade(alembic_config, "head")
+    rows = asyncio.run(run("SELECT kind, service FROM vaises_requests ORDER BY kind"))
+    assert rows == [("consultation", None), ("date_inquiry", "vestuves")]
+
+    command.downgrade(alembic_config, "0003")
+    with pytest.raises(DBAPIError):
+        asyncio.run(run("SELECT service FROM vaises_requests"))
