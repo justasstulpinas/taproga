@@ -1,4 +1,5 @@
 import asyncio
+import ssl
 import warnings
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -14,6 +15,7 @@ from app.integrations.email_senders import (
     EmailMessage,
     SmtpEmailSender,
     build_email_sender,
+    smtp_tls_context,
 )
 from app.settings import EmailBackend, SmtpSecurity
 from tests.conftest import make_settings
@@ -121,6 +123,16 @@ async def test_wrong_password_raises_so_the_worker_retries(
         await _sender(port, password="wrong-password").send(MESSAGE, SENDER)
 
     assert handler.received == []
+
+
+def test_tls_trusts_a_bundled_ca_list_and_verifies_hostnames() -> None:
+    # Some Python installs (e.g. python.org macOS builds) ship with no CA list, which made
+    # every real send fail with CERTIFICATE_VERIFY_FAILED; the sender brings its own.
+    context = smtp_tls_context()
+
+    assert context.verify_mode is ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+    assert context.cert_store_stats()["x509_ca"] > 0
 
 
 def test_build_email_sender_returns_smtp_sender_for_smtp_backend() -> None:

@@ -1,9 +1,11 @@
+import ssl
 from dataclasses import dataclass, field
 from email.message import EmailMessage as MimeMessage
 from email.utils import formatdate, make_msgid, parseaddr
 from typing import Protocol
 
 import aiosmtplib
+import certifi
 
 from app.settings import EmailBackend, Settings, SmtpSecurity
 
@@ -42,6 +44,12 @@ class MemoryEmailSender:
         self.sent.append(message)
 
 
+def smtp_tls_context() -> ssl.SSLContext:
+    """Full verification against certifi's CA list rather than the OS store: some Python builds
+    (python.org's macOS installer) ship with no CA list at all, which fails every TLS handshake."""
+    return ssl.create_default_context(cafile=certifi.where())
+
+
 @dataclass(frozen=True)
 class SmtpEmailSender:
     """Delivers through a real mailbox. Raises on any failure so the email worker retries."""
@@ -61,6 +69,7 @@ class SmtpEmailSender:
             password=self.password,
             use_tls=self.security is SmtpSecurity.SSL,
             start_tls=self.security is SmtpSecurity.STARTTLS,
+            tls_context=smtp_tls_context(),
             timeout=SMTP_TIMEOUT_SECONDS,
         )
 
