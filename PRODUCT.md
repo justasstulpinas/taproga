@@ -33,7 +33,7 @@ Vendor coordination is the core. The couple, their guests and their vendors work
 - **Shipped:** invitation builder and templates (`/kvieciam`, `/builder`), guest RSVP with plus-one and menu choice, host dashboard with guest export, event photos for higher plans, Stripe per-event payments and storage renewal.
 - **Planned** (docs/roadmap-fastapi-migration.md): FastAPI backend replacing Supabase; vendor connection by link with couple approval; shared schedule, seating, moodboard and contacts; per-vendor questionnaires; the caterer's aggregated menu and allergy view; media galleries.
 - **Plans:** `planning`, `invite_planning`, `full`, bought per event. Exact entitlements are open until the roadmap's §9 questions are answered.
-- **Vaises:** the date check and the inquiry and consultation forms are UI-complete, but their service calls are placeholders (`src/services/vaises/dateInquiry.ts`). No real availability data exists yet.
+- **Vaises:** the date check, date inquiries and consultation requests run on the FastAPI backend. The owner blocks dates by hand in `/admin/vaises`; requests are stored, emailed to the owner, and receive a receipt when the contact is an email. Real email delivery still needs a provider (the backend only logs emails until one is configured).
 - **Terminology:** UI copy is Lithuanian. "Kvieciam" is the invitation product, "Vaises" the catering brand.
 
 ## Brand Commitments
