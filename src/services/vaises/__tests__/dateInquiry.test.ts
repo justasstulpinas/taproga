@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, messageFor } from "@/lib/api/errors";
+import { countWords } from "@/lib/vaises/dateInquiry";
 import { checkDateAvailability } from "../dateInquiry";
 
 afterEach(() => {
@@ -52,4 +53,13 @@ test("messageFor falls back for unknown codes", () => {
 test("messageFor shows the request id on INTERNAL_ERROR", () => {
   const message = messageFor(new ApiError("INTERNAL_ERROR", 500, { requestId: "abc" }));
   expect(message.endsWith("(klaidos kodas: abc)")).toBe(true);
+});
+
+test("countWords counts runs of non-whitespace, emoji included", () => {
+  expect(countWords("  Ačiū 🎉  labai\nlaukiame ")).toBe(4);
+  expect(countWords("")).toBe(0);
+});
+
+test("MESSAGE_TOO_LONG has its own visitor message", () => {
+  expect(messageFor(new ApiError("MESSAGE_TOO_LONG", 422))).toBe("Ne daugiau kaip 50 žodžių.");
 });

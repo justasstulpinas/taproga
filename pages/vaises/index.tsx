@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import KvieciamTopBar from "../../components/home/KvieciamTopBar";
 import ConsultationPanel from "../../components/vaises/ConsultationPanel";
 import DateInquiryPanel from "../../components/vaises/DateInquiryPanel";
+import type { VaisesService } from "@/services/vaises/dateInquiry";
 import VaisesIntro, { type VaisesIntroPhase } from "../../components/vaises/VaisesIntro";
 import { useTopOverscrollPull } from "../../components/vaises/useTopOverscrollPull";
 import {
@@ -31,7 +32,7 @@ type VaisesPanel = {
   detailTitle: string;
   detailText: string;
   detailCtaLabel: string;
-  detailCta: "date-inquiry" | "consultation";
+  detailCta: { kind: "date-inquiry"; service: VaisesService } | { kind: "consultation" };
 };
 
 const PANELS: VaisesPanel[] = [
@@ -45,7 +46,7 @@ const PANELS: VaisesPanel[] = [
     detailText:
       "Ši meilė jau vedė mus per cechus, fabrikus, laukus ir visas erdves, kuriose kažkam kilo idėja: „Švęsime čia!“. Degame noru išgirsti jūsų sumanymą ir padėti jam realizuotis.",
     detailCtaLabel: "Susisiekti dėl konsultacijos",
-    detailCta: "consultation",
+    detailCta: { kind: "consultation" },
   },
   {
     id: "uzkandziai",
@@ -56,8 +57,8 @@ const PANELS: VaisesPanel[] = [
     detailTitle: "Nuo pasitikimo iki vėlyvos nakties",
     detailText:
       "Mėgstame juokauti, jog ",
-    detailCtaLabel: "Susisiekti dėl konsultacijos",
-    detailCta: "consultation",
+    detailCtaLabel: "Teirautis dėl datos",
+    detailCta: { kind: "date-inquiry", service: "uzkandziai" },
   },
   {
     id: "renginiai",
@@ -68,8 +69,8 @@ const PANELS: VaisesPanel[] = [
     detailTitle: "Šventė, kuri kalba jūsų kalba",
     detailText:
       "Gimtadieniai, jubiliejai, įmonių vakarai ir susitikimai. Pritaikome meniu, aptarnavimą ir tempą prie jūsų progos bei erdvės.",
-    detailCtaLabel: "Susisiekti dėl konsultacijos",
-    detailCta: "consultation",
+    detailCtaLabel: "Teirautis dėl datos",
+    detailCta: { kind: "date-inquiry", service: "renginiai" },
   },
   {
     id: "vestuves",
@@ -81,7 +82,7 @@ const PANELS: VaisesPanel[] = [
     detailText:
       "Mūsų tikslas, kad šio klausimo vienas kito klaustumėte, prisiminę savo šventę. Kuriame patirtį, kuri išliks tiek jūsų, tiek svečių atmintyje.",
     detailCtaLabel: "Teirautis dėl datos",
-    detailCta: "date-inquiry",
+    detailCta: { kind: "date-inquiry", service: "vestuves" },
   },
   {
     id: "komanda",
@@ -93,7 +94,7 @@ const PANELS: VaisesPanel[] = [
     detailText:
       "Pasidalinkite data, lokacija ir svečių skaičiumi. Sudėsime aiškų pirmą planą ir padėsime judėti toliau žingsnis po žingsnio.",
     detailCtaLabel: "Pradėti dabar",
-    detailCta: "consultation",
+    detailCta: { kind: "consultation" },
   },
 ];
 
@@ -373,11 +374,12 @@ export default function VaisesPage() {
                   </div>
                 </article>
 
-                {panel.detailCta === "date-inquiry" ? (
+                {panel.detailCta.kind === "date-inquiry" ? (
                   <DateInquiryPanel
                     id={sidePanelId}
                     isOpen={isSidePanelOpen}
                     onClose={() => closeSidePanel(panel.id)}
+                    service={panel.detailCta.service}
                   />
                 ) : (
                   <ConsultationPanel

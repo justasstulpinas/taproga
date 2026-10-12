@@ -2747,6 +2747,26 @@ button.vaises-entry-detail-cta {
   animation: vaises-date-reveal 1200ms ease 620ms both;
 }
 
+/* Message and contact steps follow a click, not a check: they appear at once, in one beat. */
+.vaises-date-result.vaises-date-step > *,
+.vaises-date-result.vaises-date-step > .vaises-date-form,
+.vaises-date-result.vaises-date-step > .vaises-date-link {
+  animation: vaises-date-reveal 260ms ease both;
+}
+
+.vaises-date-textarea {
+  min-height: 0;
+  line-height: 1.5;
+  resize: none;
+}
+
+/* Under the field, right-aligned like a character count; it takes the error colour past 50. */
+.vaises-date-counter {
+  align-self: flex-end;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .vaises-date-primary {
   min-height: 2.95rem;
   border: 1px solid var(--vaises-ink-fill);
@@ -2899,6 +2919,9 @@ button.vaises-entry-detail-cta {
   .vaises-date-result > *,
   .vaises-date-result > .vaises-date-form,
   .vaises-date-result > .vaises-date-link,
+  .vaises-date-result.vaises-date-step > *,
+  .vaises-date-result.vaises-date-step > .vaises-date-form,
+  .vaises-date-result.vaises-date-step > .vaises-date-link,
   .vaises-date-primary-delayed,
   .vaises-date-checking {
     animation: none;

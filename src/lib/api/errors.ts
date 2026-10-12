@@ -23,6 +23,7 @@ const FALLBACK_MESSAGE = "Nepavyko išsiųsti. Bandykite dar kartą.";
 const MESSAGES: Record<string, string> = {
   INVALID_DATE: "Pasirinkite datą nuo šiandien iki 3 metų į priekį.",
   INVALID_CONTACT: "Įveskite el. pašto adresą arba telefono numerį.",
+  MESSAGE_TOO_LONG: "Ne daugiau kaip 50 žodžių.",
   HUMAN_VERIFICATION_FAILED: "Nepavyko patvirtinti, kad esate žmogus. Bandykite dar kartą.",
   RATE_LIMITED: "Per daug užklausų. Pabandykite vėliau.",
 };

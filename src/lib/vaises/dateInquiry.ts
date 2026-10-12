@@ -105,3 +105,12 @@ export function parseContact(raw: string): ContactValue | null {
   const phone = trimmed.replace(PHONE_SEPARATORS, "");
   return PHONE_PATTERN.test(phone) ? { kind: "phone", value: phone } : null;
 }
+
+// Mirrors the API's message limits (api/app/schemas/vaises.py); the two must agree.
+export const MESSAGE_MAX_WORDS = 50;
+export const MESSAGE_MAX_CHARS = 600;
+
+/** Words as the API counts them: runs of non-whitespace. */
+export function countWords(text: string): number {
+  return text.match(/\S+/gu)?.length ?? 0;
+}
