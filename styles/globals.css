@@ -4797,6 +4797,17 @@ button.vaises-entry-detail-cta {
   line-height: 1.15 !important;
 }
 
+/* The visitor's own words: muted, wrapping, with their line breaks kept. */
+.admin-request-message {
+  margin-top: 0.5rem !important;
+  max-width: 65ch;
+  color: var(--text-secondary);
+  font-size: 0.875rem !important;
+  line-height: 1.55;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 .admin-request-meta {
   display: flex;
   flex-wrap: wrap;

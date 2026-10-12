@@ -17,6 +17,8 @@ function makeRequest(overrides: Partial<VaisesRequestOut> = {}): VaisesRequestOu
     kind: "date_inquiry",
     event_date: "2026-11-14",
     event_date_label: "2026 m. lapkričio 14 d.",
+    service: "vestuves",
+    message: null,
     availability_at_submit: "available",
     contact_kind: "email",
     contact: "jonas@example.com",
@@ -34,6 +36,7 @@ const SECOND = makeRequest({
   kind: "consultation",
   event_date: null,
   event_date_label: null,
+  service: null,
   availability_at_submit: null,
   contact_kind: "phone",
   contact: "+37060000000",
@@ -92,10 +95,44 @@ afterEach(() => {
 });
 
 describe("RequestsList rows", () => {
+  it("labels a date inquiry with its service and shows the message", () => {
+    renderList([makeRequest({ service: "renginiai", message: "Vakarienė 80 svečių." })]);
+    const item = row(/^Renginiai, 2026 m\. lapkričio 14 d\.$/);
+    expect(within(item).getByText("Renginiai").className).toBe("admin-request-kind");
+    expect(within(item).getByText("Vakarienė 80 svečių.").className).toBe("admin-request-message");
+  });
+
+  it("shows a consultation with no service label and no message", () => {
+    const { container } = renderList([SECOND]);
+    expect(row(/^Konsultacija$/)).toBeTruthy();
+    expect(container.querySelector(".admin-request-message")).toBeNull();
+  });
+
+  it("shows no message once erased", () => {
+    const { container } = renderList([
+      makeRequest({ message: "Liko po ištrynimo", contact: null, contact_kind: null, anonymised_at: "2026-10-11T00:00:00Z" }),
+    ]);
+    expect(screen.queryByText("Liko po ištrynimo")).toBeNull();
+    expect(container.querySelector(".admin-request-message")).toBeNull();
+  });
+
+  it("keeps the message's line breaks", () => {
+    const { container } = renderList([makeRequest({ message: "Pirma eilutė\nantra eilutė" })]);
+    const message = container.querySelector(".admin-request-message");
+    expect(message?.textContent).toBe("Pirma eilutė\nantra eilutė");
+  });
+
+  it("renders a script-like message as plain text", () => {
+    const attack = "<script>alert(1)</script><img src=x onerror=alert(1)>";
+    const { container } = renderList([makeRequest({ message: attack })]);
+    expect(container.querySelector(".admin-request-message")?.textContent).toBe(attack);
+    expect(container.querySelector("script, img")).toBeNull();
+  });
+
   it("shows kind, date, availability, contact link and Vilnius arrival time", () => {
     renderList();
     const first = row(/lapkričio 14/);
-    expect(first.textContent).toContain("Datos užklausa");
+    expect(first.textContent).toContain("Vestuvės");
     expect(first.textContent).toContain("laisva");
     expect(first.textContent).toContain("2026-10-11");
     expect(first.textContent).toContain("00:30");

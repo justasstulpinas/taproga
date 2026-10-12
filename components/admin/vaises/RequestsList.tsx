@@ -115,7 +115,11 @@ type RowProps = {
 };
 
 function RequestRow({ request, highlighted, onHandle, onErase }: RowProps) {
-  const kind = request.kind === "date_inquiry" ? copy.kindDateInquiry : copy.kindConsultation;
+  const kind = request.service
+    ? copy.serviceLabels[request.service]
+    : request.kind === "date_inquiry"
+      ? copy.kindDateInquiry
+      : copy.kindConsultation;
   const availability =
     request.availability_at_submit === "available"
       ? copy.availabilityAvailable
@@ -149,6 +153,10 @@ function RequestRow({ request, highlighted, onHandle, onErase }: RowProps) {
             {copy.receivedLabel}: {arrival.format(new Date(request.created_at))}
           </span>
         </p>
+        {!erased && request.message && (
+          // Visitor text: always a text node, never markup.
+          <p className="admin-request-message">{request.message}</p>
+        )}
         {erased || request.contact === null ? (
           <p className="admin-muted">{copy.contactErased}</p>
         ) : (
@@ -317,7 +325,7 @@ export default function RequestsList(props: Props) {
     const request = erasing;
     setErasing(null);
     if (!request || !begin(request.id)) return;
-    place({ ...request, contact: null, contact_kind: null, anonymised_at: new Date().toISOString() });
+    place({ ...request, contact: null, contact_kind: null, message: null, anonymised_at: new Date().toISOString() });
     try {
       place(await erase(request.id));
     } catch (caught) {

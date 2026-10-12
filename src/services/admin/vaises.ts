@@ -22,11 +22,15 @@ export async function unblockDate(isoDate: string): Promise<void> {
 
 export type VaisesRequestStatus = "new" | "handled";
 
+export type VaisesServiceKind = "uzkandziai" | "renginiai" | "vestuves";
+
 export type VaisesRequestOut = {
   id: string;
   kind: "date_inquiry" | "consultation";
   event_date: string | null;
   event_date_label: string | null;
+  service: VaisesServiceKind | null;
+  message: string | null;
   availability_at_submit: "available" | "reserved" | null;
   contact_kind: "email" | "phone" | null;
   contact: string | null;

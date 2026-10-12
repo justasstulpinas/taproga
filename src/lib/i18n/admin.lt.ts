@@ -48,6 +48,8 @@ export const adminLt = {
     showMore: "Rodyti daugiau",
     loading: "Kraunama…",
     kindDateInquiry: "Datos užklausa",
+    // Shown in caps by CSS, like the kind label.
+    serviceLabels: { uzkandziai: "Užkandžiai", renginiai: "Renginiai", vestuves: "Vestuvės" },
     kindConsultation: "Konsultacija",
     availabilityAvailable: "laisva",
     availabilityReserved: "rezervuota",
