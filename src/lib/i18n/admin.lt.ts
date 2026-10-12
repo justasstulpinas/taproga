@@ -1,7 +1,7 @@
 const sentenceEnd = (text: string): string => (text.endsWith(".") ? text : `${text}.`);
 
 export const adminLt = {
-  brand: "Vaišės",
+  brand: "Vaises",
   nav: {
     requests: "Užklausos",
     dates: "Datos",

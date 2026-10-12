@@ -24,10 +24,6 @@ const arrival = new Intl.DateTimeFormat("lt-LT", {
   timeStyle: "short",
 });
 
-const FOCUS =
-  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-dark)]";
-const BUTTON_CLASS = `inline-flex min-h-[2.95rem] items-center justify-center rounded-full border border-[var(--line-strong)] px-4 text-sm hover:bg-[var(--line-soft)] disabled:opacity-50 disabled:pointer-events-none aria-busy:opacity-50 ${FOCUS}`;
-
 type ListState = { items: VaisesRequestOut[]; next: string | null; loaded: boolean; busy: boolean; failed: boolean };
 type Lists = Record<VaisesRequestStatus, ListState>;
 type Notice =
@@ -74,9 +70,9 @@ function contactHref(request: VaisesRequestOut): string {
 
 function Skeleton() {
   return (
-    <ul role="status" aria-label={copy.loading} className="space-y-3">
+    <ul role="status" aria-label={copy.loading} className="admin-skeleton">
       {Array.from({ length: SKELETON_ROWS }, (_, index) => (
-        <li key={index} aria-hidden="true" className="h-24 animate-pulse rounded border border-[var(--line-soft)] bg-[var(--line-soft)] motion-reduce:animate-none" />
+        <li key={index} aria-hidden="true" />
       ))}
     </ul>
   );
@@ -95,17 +91,15 @@ function EraseDialog({ onConfirm, onClose }: { onConfirm: () => void; onClose: (
       ref={ref}
       aria-labelledby="erase-title"
       onClose={onClose}
-      className="m-auto w-[calc(100%-2rem)] max-w-sm rounded border border-[var(--line-strong)] bg-[var(--bg-main)] p-6 text-[var(--text-primary)] backdrop:bg-black/40"
+      className="admin-dialog"
     >
-      <h2 id="erase-title" className="mb-2 text-base">
-        {copy.eraseTitle}
-      </h2>
-      <p className="mb-6 text-sm leading-relaxed text-[var(--text-secondary)]">{copy.eraseBody}</p>
-      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <button type="button" ref={cancelRef} onClick={() => ref.current?.close()} className={BUTTON_CLASS}>
+      <h2 id="erase-title">{copy.eraseTitle}</h2>
+      <p>{copy.eraseBody}</p>
+      <div className="admin-dialog-actions">
+        <button type="button" ref={cancelRef} onClick={() => ref.current?.close()} className="admin-btn">
           {copy.eraseCancel}
         </button>
-        <button type="button" onClick={onConfirm} className={`${BUTTON_CLASS} bg-[var(--accent-dark)] text-[var(--bg-main)]`}>
+        <button type="button" onClick={onConfirm} className="admin-btn admin-btn--danger">
           {copy.eraseConfirm}
         </button>
       </div>
@@ -134,39 +128,43 @@ function RequestRow({ request, highlighted, onHandle, onErase }: RowProps) {
       id={`request-${request.id}`}
       aria-label={request.event_date_label ? `${kind}, ${request.event_date_label}` : kind}
       data-highlighted={highlighted ? "true" : undefined}
-      className={`flex flex-col gap-3 rounded border p-4 sm:flex-row sm:items-center sm:justify-between ${highlighted ? "border-[var(--accent-dark)] bg-[var(--line-soft)]" : "border-[var(--line-soft)]"}`}
+      className="admin-request"
     >
-      <div className="min-w-0 space-y-1 text-sm">
-        <p className="text-base">
-          {kind}
-          {request.event_date_label && <span className="text-[var(--text-secondary)]"> · {request.event_date_label}</span>}
-        </p>
-        {availability && (
-          <p className="text-[var(--text-secondary)]">
-            {copy.availabilityLabel}: {availability}
-          </p>
+      <div className="admin-request-body">
+        {request.event_date_label ? (
+          <>
+            <p className="admin-request-kind">{kind}</p>
+            <p className="admin-request-date">{request.event_date_label}</p>
+          </>
+        ) : (
+          <p className="admin-request-date">{kind}</p>
         )}
-        <p className="truncate">
-          {erased || request.contact === null ? (
-            <span className="text-[var(--text-secondary)]">{copy.contactErased}</span>
-          ) : (
-            <a href={contactHref(request)} className={`inline-flex min-h-[2.95rem] items-center underline underline-offset-4 ${FOCUS}`}>
-              {request.contact}
-            </a>
+        <p className="admin-request-meta">
+          {availability && (
+            <span className={`admin-status admin-status--${request.availability_at_submit}`}>
+              {copy.availabilityLabel}: {availability}
+            </span>
           )}
+          <span>
+            {copy.receivedLabel}: {arrival.format(new Date(request.created_at))}
+          </span>
         </p>
-        <p className="text-[var(--text-secondary)]">
-          {copy.receivedLabel}: {arrival.format(new Date(request.created_at))}
-        </p>
+        {erased || request.contact === null ? (
+          <p className="admin-muted">{copy.contactErased}</p>
+        ) : (
+          <a href={contactHref(request)} className="admin-contact">
+            {request.contact}
+          </a>
+        )}
       </div>
-      <div className="flex flex-col gap-2 sm:items-end">
+      <div className="admin-request-actions">
         {request.status === "new" && (
-          <button type="button" onClick={() => onHandle(request)} className={BUTTON_CLASS}>
+          <button type="button" onClick={() => onHandle(request)} className="admin-btn admin-btn--primary">
             {copy.markHandled}
           </button>
         )}
         {!erased && (
-          <button type="button" onClick={() => onErase(request)} className={BUTTON_CLASS}>
+          <button type="button" onClick={() => onErase(request)} className="admin-link-btn admin-link-btn--danger">
             {copy.erase}
           </button>
         )}
@@ -335,8 +333,8 @@ export default function RequestsList(props: Props) {
   const showEmpty = list.loaded && !list.busy && list.items.length === 0;
 
   return (
-    <div className="space-y-4">
-      <div role="tablist" aria-label={copy.tabsLabel} className="flex gap-1 border-b border-[var(--line-soft)]">
+    <div>
+      <div role="tablist" aria-label={copy.tabsLabel} className="admin-tabs">
         {TABS.map((status) => (
           <button
             key={status}
@@ -348,38 +346,38 @@ export default function RequestsList(props: Props) {
             tabIndex={tab === status ? 0 : -1}
             onClick={() => select(status)}
             onKeyDown={onTabKeyDown}
-            className={`inline-flex min-h-[2.95rem] items-center px-4 text-sm ${FOCUS} ${tab === status ? "border-b-2 border-[var(--accent-dark)]" : "text-[var(--text-secondary)]"}`}
+            className="admin-tab"
           >
             {TAB_LABELS[status]}
           </button>
         ))}
       </div>
 
-      <div aria-live="polite" className="space-y-2">
+      <div aria-live="polite" className="admin-notices">
         {notices.map((notice) =>
           notice.kind === "undo" ? (
-            <p key={notice.key} role="status" className="flex flex-wrap items-center gap-x-2 text-sm">
-              <span>{copy.handledNotice} ·</span>
+            <p key={notice.key} role="status" className="admin-notice">
+              <span>{copy.handledNotice}</span>
               <button
                 type="button"
                 aria-busy={undoPending.has(notice.request.id) ? true : undefined}
                 onClick={() => void undo(notice)}
-                className={`inline-flex min-h-[2.95rem] items-center underline underline-offset-4 aria-busy:opacity-50 ${FOCUS}`}
+                className="admin-link-btn"
               >
                 {undoPending.has(notice.request.id) ? copy.undoing : copy.undo}
               </button>
             </p>
           ) : (
-            <p key={notice.key} role="alert" className="text-sm">
+            <p key={notice.key} role="alert" className="admin-notice admin-notice--error">
               {notice.text}
             </p>
           ),
         )}
       </div>
 
-      <div id="requests-panel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="space-y-4">
+      <div id="requests-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
         {list.items.length > 0 && (
-          <ul className="space-y-3">
+          <ul className="admin-requests">
             {list.items.map((request) => (
               <RequestRow
                 key={request.id}
@@ -392,17 +390,17 @@ export default function RequestsList(props: Props) {
           </ul>
         )}
         {list.busy && <Skeleton />}
-        {showEmpty && <p className="py-8 text-center text-sm text-[var(--text-secondary)]">{EMPTY_LABELS[tab]}</p>}
+        {showEmpty && <p className="admin-empty">{EMPTY_LABELS[tab]}</p>}
         {list.failed && (
-          <div role="alert" className="space-y-2 text-sm">
-            <p>{copy.loadFailed}</p>
-            <button type="button" onClick={() => void load(tab)} className={BUTTON_CLASS}>
+          <div role="alert" className="admin-failed">
+            <p className="admin-alert">{copy.loadFailed}</p>
+            <button type="button" onClick={() => void load(tab)} className="admin-btn">
               {copy.retry}
             </button>
           </div>
         )}
         {list.loaded && !list.busy && !list.failed && list.next !== null && (
-          <button type="button" onClick={() => void load(tab)} className={BUTTON_CLASS}>
+          <button type="button" onClick={() => void load(tab)} className="admin-btn admin-more">
             {copy.showMore}
           </button>
         )}

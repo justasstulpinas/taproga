@@ -21,9 +21,6 @@ function loginErrorMessage(error: unknown): string {
   return messageFor(error);
 }
 
-const FIELD_CLASS =
-  "min-h-[2.95rem] w-full rounded-[var(--radius-md)] border border-[var(--line-strong)] bg-[var(--bg-main)] px-[var(--control-pad-x)] text-base text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-dark)]";
-
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -61,11 +58,11 @@ export default function AdminLoginPage() {
         <title>{copy.title}</title>
         <meta name="robots" content="noindex" />
       </Head>
-      <main className="flex min-h-screen items-center justify-center bg-[var(--bg-main)] px-4 py-8 text-[var(--text-primary)]">
-        <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4" noValidate>
-          <h1 className="text-2xl">{copy.title}</h1>
-          <div className="space-y-2">
-            <label htmlFor="admin-email" className="block text-sm text-[var(--text-secondary)]">
+      <main className="admin-root admin-login">
+        <form onSubmit={onSubmit} className="admin-login-form" noValidate>
+          <h1 className="admin-login-title">{copy.title}</h1>
+          <div className="admin-field">
+            <label htmlFor="admin-email" className="admin-label">
               {copy.email}
             </label>
             <input
@@ -75,11 +72,11 @@ export default function AdminLoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={FIELD_CLASS}
+              className="admin-input"
             />
           </div>
-          <div className="space-y-2">
-            <label htmlFor="admin-password" className="block text-sm text-[var(--text-secondary)]">
+          <div className="admin-field">
+            <label htmlFor="admin-password" className="admin-label">
               {copy.password}
             </label>
             <input
@@ -89,19 +86,15 @@ export default function AdminLoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={FIELD_CLASS}
+              className="admin-input"
             />
           </div>
           {error && (
-            <p role="alert" className="text-sm text-[var(--text-primary)]">
+            <p role="alert" className="admin-alert">
               {error}
             </p>
           )}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="min-h-[2.95rem] w-full rounded-[var(--radius-md)] bg-[var(--accent-dark)] px-[var(--button-pad-x)] text-base text-[var(--bg-main)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-dark)] disabled:opacity-50"
-          >
+          <button type="submit" disabled={submitting} className="admin-btn admin-btn--primary admin-btn--full">
             {submitting ? copy.submitting : copy.submit}
           </button>
         </form>

@@ -23,7 +23,9 @@ export default function RequestsPage(props: Props) {
       <Head>
         <title>{copy.title}</title>
       </Head>
-      <h1 className="mb-6 text-xl">{copy.title}</h1>
+      <div className="admin-page-head">
+        <h1 className="admin-page-title">{copy.title}</h1>
+      </div>
       <RequestsList {...props} />
     </AdminLayout>
   );

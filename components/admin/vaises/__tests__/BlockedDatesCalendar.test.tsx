@@ -45,6 +45,11 @@ function heading(): string {
   return screen.getByRole("heading", { level: 2, name: /\d{4}$/ }).textContent ?? "";
 }
 
+/** The date part of an "upcoming" row; the row also shows the weekday. */
+function upcomingDate(item: HTMLElement): string {
+  return item.firstElementChild?.textContent ?? "";
+}
+
 beforeEach(() => {
   push.mockReset();
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -207,15 +212,16 @@ describe("BlockedDatesCalendar", () => {
     );
     await act(async () => next());
     expect(screen.getByRole("heading", { name: "Užblokuotos datos per artimiausius 13 mėnesių" })).toBeTruthy();
-    expect(screen.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["2027 m. lapkričio 14 d."]);
+    expect(screen.getAllByRole("listitem").map(upcomingDate)).toEqual(["2027 m. lapkričio 14 d."]);
   });
 
   it("lists upcoming blocked dates in order, or an empty state", () => {
     const { unmount } = render(
       <BlockedDatesCalendar initialBlocked={["2026-12-05", "2026-11-14"]} month={MONTH} through={THROUGH} />,
     );
-    const items = screen.getAllByRole("listitem").map((li) => li.textContent);
-    expect(items).toEqual(["2026 m. lapkričio 14 d.", "2026 m. gruodžio 5 d."]);
+    const items = screen.getAllByRole("listitem");
+    expect(items.map(upcomingDate)).toEqual(["2026 m. lapkričio 14 d.", "2026 m. gruodžio 5 d."]);
+    expect(items[0].textContent).toContain("šeštadienis");
     unmount();
     render(<BlockedDatesCalendar initialBlocked={[]} month={MONTH} through={THROUGH} />);
     expect(screen.getByText("Užblokuotų datų nėra.")).toBeTruthy();
@@ -223,8 +229,8 @@ describe("BlockedDatesCalendar", () => {
 
   it("marks a blocked day with a strike-through, not colour alone", () => {
     render(<BlockedDatesCalendar initialBlocked={["2026-11-14"]} month={MONTH} through={THROUGH} />);
-    expect(day(/14 d\./).className).toContain("line-through");
-    expect(day(/15 d\./).className).not.toContain("line-through");
+    expect(day(/14 d\./).className).toContain("admin-day--blocked");
+    expect(day(/15 d\./).className).not.toContain("admin-day--blocked");
   });
 });
 

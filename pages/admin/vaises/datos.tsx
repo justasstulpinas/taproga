@@ -19,13 +19,15 @@ export default function BlockedDatesPage({ blocked, month, through }: Props) {
       <Head>
         <title>{copy.title}</title>
       </Head>
-      <h1 className="mb-1 text-xl">{copy.title}</h1>
-      <p className="mb-6 text-sm text-[var(--text-secondary)]">{copy.intro}</p>
-      {through === null && (
-        <p role="alert" className="mb-4 text-sm">
-          {copy.loadFailed}
-        </p>
-      )}
+      <div className="admin-page-head">
+        <h1 className="admin-page-title">{copy.title}</h1>
+        <p className="admin-page-intro">{copy.intro}</p>
+        {through === null && (
+          <p role="alert" className="admin-alert admin-calendar-error">
+            {copy.loadFailed}
+          </p>
+        )}
+      </div>
       <BlockedDatesCalendar initialBlocked={blocked} month={month} through={through} />
     </AdminLayout>
   );

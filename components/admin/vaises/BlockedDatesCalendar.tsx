@@ -18,15 +18,7 @@ import {
 import { blockDate, listBlockedDates, unblockDate } from "@/services/admin/vaises";
 
 const copy = adminLt.dates;
-const FOCUS =
-  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-dark)]";
-const NAV_CLASS = `inline-flex size-[2.95rem] items-center justify-center rounded-full text-xl hover:bg-[var(--line-soft)] disabled:opacity-30 disabled:pointer-events-none ${FOCUS}`;
-const DAY_CLASS = `relative flex size-[2.95rem] items-center justify-center rounded-full border border-transparent text-sm hover:border-[var(--line-strong)] disabled:text-[var(--text-secondary)] disabled:opacity-40 disabled:pointer-events-none ${FOCUS}`;
-const BLOCKED_CLASS =
-  "bg-[var(--accent-dark)] text-[var(--bg-main)] hover:border-[var(--accent-dark)] line-through decoration-2";
-const BUTTON_CLASS = `inline-flex min-h-[2.95rem] items-center justify-center rounded-full border border-[var(--line-strong)] px-4 text-sm hover:bg-[var(--line-soft)] ${FOCUS}`;
-// Six rows of 2.95rem days plus their gaps, so loading and error states keep the grid's height.
-const GRID_HEIGHT = "min-h-[18.95rem]";
+const weekday = new Intl.DateTimeFormat("lt-LT", { weekday: "long" });
 
 type MonthStatus = "loading" | "loaded" | "failed";
 
@@ -123,19 +115,19 @@ export default function BlockedDatesCalendar({ initialBlocked, month, through }:
   }
 
   return (
-    <div className="space-y-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-4 flex items-center justify-between">
+    <div className="admin-dates">
+      <div>
+        <div className="admin-calendar-head">
           <button
             type="button"
             aria-label={copy.previousMonth}
             disabled={isSameMonth(cursor, minMonth)}
             onClick={() => setCursor(shiftMonth(cursor, -1))}
-            className={NAV_CLASS}
+            className="admin-calendar-nav"
           >
             ‹
           </button>
-          <h2 aria-live="polite" className="text-base">
+          <h2 aria-live="polite" className="admin-calendar-title">
             {monthLabel(cursor)}
           </h2>
           <button
@@ -143,18 +135,18 @@ export default function BlockedDatesCalendar({ initialBlocked, month, through }:
             aria-label={copy.nextMonth}
             disabled={isSameMonth(cursor, maxMonth)}
             onClick={() => setCursor(shiftMonth(cursor, 1))}
-            className={NAV_CLASS}
+            className="admin-calendar-nav"
           >
             ›
           </button>
         </div>
-        <div aria-hidden="true" className="grid grid-cols-7 justify-items-center pb-2 text-xs text-[var(--text-secondary)]">
+        <div aria-hidden="true" className="admin-weekdays">
           {LT_WEEKDAYS_SHORT.map((label) => (
             <span key={label}>{label}</span>
           ))}
         </div>
         {status === "loaded" ? (
-          <div className="grid grid-cols-7 justify-items-center gap-y-1">
+          <div className="admin-days">
             {cells.map((cell) => {
               if (cell.kind === "blank") return <span key={cell.key} aria-hidden="true" />;
               const iso = toIsoDate(cell.date);
@@ -172,7 +164,7 @@ export default function BlockedDatesCalendar({ initialBlocked, month, through }:
                   aria-label={formatFullDateLt(cell.date)}
                   aria-current={isSameDay(cell.date, today) ? "date" : undefined}
                   onClick={() => void toggle(cell.date)}
-                  className={`${DAY_CLASS} ${isBlocked ? BLOCKED_CLASS : ""}`}
+                  className={isBlocked ? "admin-day admin-day--blocked" : "admin-day"}
                 >
                   {cell.day}
                 </button>
@@ -180,38 +172,42 @@ export default function BlockedDatesCalendar({ initialBlocked, month, through }:
             })}
           </div>
         ) : status === "failed" ? (
-          <div role="alert" className={`${GRID_HEIGHT} space-y-3 pt-4 text-sm`}>
-            <p>{copy.monthLoadFailed(monthLabel(cursor))}</p>
-            <button type="button" onClick={() => void loadMonth(cursor)} className={BUTTON_CLASS}>
+          <div role="alert" className="admin-calendar-failed">
+            <p className="admin-alert">{copy.monthLoadFailed(monthLabel(cursor))}</p>
+            <button type="button" onClick={() => void loadMonth(cursor)} className="admin-btn">
               {copy.retry}
             </button>
           </div>
         ) : (
-          <div role="status" className={`${GRID_HEIGHT} animate-pulse rounded bg-[var(--line-soft)] motion-reduce:animate-none`}>
-            <span className="sr-only">{copy.loading}</span>
+          <div role="status" className="admin-calendar-placeholder">
+            <span className="admin-sr-only">{copy.loading}</span>
           </div>
         )}
         {error && (
-          <p role="alert" className="mt-4 text-sm">
+          <p role="alert" className="admin-alert admin-calendar-error">
             {error}
           </p>
         )}
       </div>
 
-      <section aria-labelledby="upcoming-blocked">
-        <h2 id="upcoming-blocked" className="mb-2 text-base">
-          {copy.upcomingTitle}
-        </h2>
+      <section aria-labelledby="upcoming-blocked" className="admin-upcoming">
+        <h2 id="upcoming-blocked">{copy.upcomingTitle}</h2>
         {upcoming === null ? (
-          <p className="text-sm text-[var(--text-secondary)]">{copy.upcomingUnavailable}</p>
+          <p className="admin-muted">{copy.upcomingUnavailable}</p>
         ) : upcoming.length === 0 ? (
-          <p className="text-sm text-[var(--text-secondary)]">{copy.empty}</p>
+          <p className="admin-muted">{copy.empty}</p>
         ) : (
-          <ul className="space-y-1 text-sm">
-            {upcoming.map((iso) => (
-              <li key={iso}>{formatLongDateLt(parseIsoDate(iso))}</li>
-            ))}
-          </ul>
+          <ol>
+            {upcoming.map((iso) => {
+              const date = parseIsoDate(iso);
+              return (
+                <li key={iso}>
+                  <span>{formatLongDateLt(date)}</span>
+                  <span className="admin-upcoming-weekday">{weekday.format(date)}</span>
+                </li>
+              );
+            })}
+          </ol>
         )}
       </section>
     </div>
