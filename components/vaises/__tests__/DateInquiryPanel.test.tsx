@@ -150,6 +150,20 @@ test("changing the date keeps the typed message", async () => {
   expect((screen.getByLabelText(MESSAGE_LABEL) as HTMLTextAreaElement).value).toBe(MESSAGE);
 });
 
+test("Keisti datą moves focus to the month heading once the calendar is interactive again", async () => {
+  // Browsers ignore focus() inside an inert subtree; jsdom doesn't, so mirror that here.
+  const focus = HTMLElement.prototype.focus;
+  vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options) {
+    if (!this.closest("[inert]")) focus.call(this, options);
+  });
+  const user = userEvent.setup();
+  await openResultStep(user);
+  await user.click(screen.getByRole("button", { name: "Keisti datą" }));
+
+  expect(document.activeElement?.tagName).toBe("H3");
+  vi.restoreAllMocks();
+});
+
 test("a failed send returns to the contact step with message and contact intact", async () => {
   submitResponses.push(jsonResponse(500, { error: { code: "INTERNAL_ERROR" } }));
   const user = userEvent.setup();

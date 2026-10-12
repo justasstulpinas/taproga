@@ -154,7 +154,8 @@ export default function DateInquiryPanel({
 
   function changeDate() {
     resetInquiry();
-    headingRef.current?.focus({ preventScroll: true });
+    // Focused by the step effect: the calendar is still inert until that render commits.
+    focusStepRef.current = true;
   }
 
   async function handleCheck() {
